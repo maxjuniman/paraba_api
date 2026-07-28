@@ -1,0 +1,57 @@
+name: Deploy API
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: paraba-api-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/paraba-api
+          chmod 600 ~/.ssh/paraba-api
+          ssh-keyscan -H 167.233.239.13 >> ~/.ssh/known_hosts
+
+      - name: Deploy on VPS
+        run: |
+          ssh -i ~/.ssh/paraba-api maxfoot@167.233.239.13 'bash -s' <<'EOF'
+            set -euo pipefail
+
+            cd /opt/paraba-api
+            git pull --ff-only origin main
+            npm ci
+            npm run build
+
+            if pm2 describe paraba-api > /dev/null; then
+              pm2 restart paraba-api --update-env
+            else
+              pm2 start dist/server.js --name paraba-api --update-env
+            fi
+
+            pm2 save
+          EOF
