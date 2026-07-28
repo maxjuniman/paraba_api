@@ -1,4 +1,4 @@
-export type UserType = 'admin' | 'professor' | 'aluno';
+export type UserType = 1 | 2;
 
 export type User = {
   id: string;

@@ -84,7 +84,7 @@ authRoutes.post('/register', async (req, res) => {
     return;
   }
 
-  const tipo: UserType = database.users.length === 0 ? 'admin' : aluno ? 'aluno' : 'professor';
+  const tipo: UserType = database.users.length === 0 ? 1 : 2;
   const now = new Date().toISOString();
   const user: User = {
     id: randomUUID(),
