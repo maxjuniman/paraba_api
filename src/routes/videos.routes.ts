@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { readDatabase, writeDatabase } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
+import { requireProfessor } from '../middleware/requireProfessor.js';
 import type { VideoUpdate } from '../types.js';
 
 export const videosRoutes = Router();
@@ -24,7 +25,7 @@ videosRoutes.get('/', async (_req, res) => {
   res.json({ data: videos });
 });
 
-videosRoutes.post('/', async (req, res) => {
+videosRoutes.post('/', requireProfessor, async (req, res) => {
   const parsed = videoSchema.safeParse(req.body);
 
   if (!parsed.success) {

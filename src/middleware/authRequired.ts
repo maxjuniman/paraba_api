@@ -41,6 +41,11 @@ export async function authRequired(req: Request, res: Response, next: NextFuncti
       return;
     }
 
+    if (user.ativo === false) {
+      res.status(403).json({ message: 'Seu cadastro ainda precisa ser autorizado pelo professor.' });
+      return;
+    }
+
     req.user = toPublicUser(user);
     next();
   } catch {

@@ -3,18 +3,31 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { readDatabase, writeDatabase } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
+import { requireProfessor } from '../middleware/requireProfessor.js';
 import type { Aluno, PublicUser } from '../types.js';
 
 export const alunosRoutes = Router();
 
-alunosRoutes.use(authRequired);
+alunosRoutes.use(authRequired, requireProfessor);
+
+const paymentDaySchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,2}$/, 'Informe o dia de pagamento entre 1 e 31.')
+  .refine((value) => {
+    const day = Number(value);
+    return Number.isInteger(day) && day >= 1 && day <= 31;
+  }, 'Informe o dia de pagamento entre 1 e 31.');
 
 const alunoSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do aluno.'),
+  apelido: z.string().trim().optional(),
   emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
   celular: z.string().trim().optional(),
   dataNascimento: z.string().trim().optional(),
-  dataPagamento: z.string().trim().optional(),
+  dataPagamento: paymentDaySchema.optional(),
+  faixaAtual: z.string().trim().optional(),
+  graus: z.number().int().min(0).max(10).optional(),
 });
 
 const vincularUserSchema = z.object({
@@ -22,7 +35,7 @@ const vincularUserSchema = z.object({
 });
 
 const pagamentoSchema = z.object({
-  data_pagamento: z.string().trim().min(1, 'Informe a data de pagamento.'),
+  data_pagamento: paymentDaySchema,
 });
 
 function userPreview(user?: PublicUser | null) {
@@ -63,10 +76,13 @@ alunosRoutes.post('/', async (req, res) => {
   const aluno: Aluno = {
     id: randomUUID(),
     nome: parsed.data.nome,
+    apelido: parsed.data.apelido || null,
     emailResponsavel: parsed.data.emailResponsavel || undefined,
     celular: parsed.data.celular || undefined,
     dataNascimento: parsed.data.dataNascimento || undefined,
     dataPagamento: parsed.data.dataPagamento || null,
+    faixaAtual: parsed.data.faixaAtual || null,
+    graus: parsed.data.graus ?? 0,
     userId: null,
     user: null,
     createdAt: now,

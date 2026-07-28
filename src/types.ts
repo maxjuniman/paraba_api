@@ -7,6 +7,7 @@ export type User = {
   celular?: string;
   passwordHash: string;
   tipo: UserType;
+  ativo: boolean;
   alunoId?: string | null;
   createdAt: string;
 };
@@ -16,16 +17,20 @@ export type PublicUser = {
   nome: string;
   email: string;
   tipo: UserType;
+  ativo: boolean;
   alunoId?: string | null;
 };
 
 export type Aluno = {
   id: string;
   nome: string;
+  apelido?: string | null;
   emailResponsavel?: string;
   celular?: string;
   dataNascimento?: string;
   dataPagamento?: string | null;
+  faixaAtual?: string | null;
+  graus?: number | null;
   userId?: string | null;
   user?: Pick<PublicUser, 'id' | 'nome' | 'email'> | null;
   createdAt: string;

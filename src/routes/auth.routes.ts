@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { signAccessToken, toPublicUser } from '../lib/auth.js';
 import { readDatabase, writeDatabase } from '../lib/db.js';
-import type { User, UserType } from '../types.js';
+import type { User } from '../types.js';
 
 export const authRoutes = Router();
 
@@ -19,7 +19,6 @@ const registerSchema = z.object({
   celular: z.string().trim().optional().default(''),
   senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
   confirmacao_senha: z.string().min(6),
-  aluno_id: z.string().trim().optional(),
 });
 
 function sessionPayload(user: User) {
@@ -46,6 +45,11 @@ authRoutes.post('/login', async (req, res) => {
     return;
   }
 
+  if (user.ativo === false) {
+    res.status(403).json({ message: 'Seu cadastro ainda precisa ser autorizado pelo professor.' });
+    return;
+  }
+
   res.json(sessionPayload(user));
 });
 
@@ -57,7 +61,7 @@ authRoutes.post('/register', async (req, res) => {
     return;
   }
 
-  const { nome, senha, confirmacao_senha, aluno_id } = parsed.data;
+  const { nome, senha, confirmacao_senha } = parsed.data;
   const email = parsed.data.email.toLowerCase();
 
   if (senha !== confirmacao_senha) {
@@ -72,19 +76,6 @@ authRoutes.post('/register', async (req, res) => {
     return;
   }
 
-  const aluno = aluno_id ? database.alunos.find((item) => item.id === aluno_id) : null;
-
-  if (aluno_id && !aluno) {
-    res.status(404).json({ message: 'Aluno nao encontrado para vinculo.' });
-    return;
-  }
-
-  if (aluno?.userId) {
-    res.status(409).json({ message: 'Este aluno ja esta vinculado a outro usuario.' });
-    return;
-  }
-
-  const tipo: UserType = database.users.length === 0 ? 1 : 2;
   const now = new Date().toISOString();
   const user: User = {
     id: randomUUID(),
@@ -92,18 +83,17 @@ authRoutes.post('/register', async (req, res) => {
     email,
     celular: parsed.data.celular || undefined,
     passwordHash: await bcrypt.hash(senha, 10),
-    tipo,
-    alunoId: aluno?.id ?? null,
+    tipo: 2,
+    ativo: false,
+    alunoId: null,
     createdAt: now,
   };
 
   database.users.push(user);
-
-  if (aluno) {
-    aluno.userId = user.id;
-  }
-
   await writeDatabase(database);
 
-  res.status(201).json(sessionPayload(user));
+  res.status(201).json({
+    message: 'Cadastro enviado. Aguarde a autorizacao do professor para acessar o aplicativo.',
+    user: toPublicUser(user),
+  });
 });
