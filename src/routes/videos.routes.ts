@@ -7,8 +7,18 @@ import { requireProfessor } from '../middleware/requireProfessor.js';
 import type { VideoUpdate } from '../types.js';
 
 export const videosRoutes = Router();
+const videosEnabled = process.env.ENABLE_VIDEOS === 'true';
 
-videosRoutes.use(authRequired);
+videosRoutes.use(authRequired, requireProfessor);
+
+videosRoutes.use((_req, res, next) => {
+  if (!videosEnabled) {
+    res.status(503).json({ message: 'Videos estao desabilitados no momento.' });
+    return;
+  }
+
+  next();
+});
 
 const videoSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o titulo do video.'),
@@ -25,7 +35,7 @@ videosRoutes.get('/', async (_req, res) => {
   res.json({ data: videos });
 });
 
-videosRoutes.post('/', requireProfessor, async (req, res) => {
+videosRoutes.post('/', async (req, res) => {
   const parsed = videoSchema.safeParse(req.body);
 
   if (!parsed.success) {

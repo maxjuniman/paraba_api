@@ -8,6 +8,8 @@ import type { User } from '../types.js';
 
 export const authRoutes = Router();
 
+const studentRegistrationEnabled = process.env.ENABLE_STUDENT_REGISTRATION !== 'false';
+
 const loginSchema = z.object({
   email: z.string().email(),
   senha: z.string().min(1),
@@ -54,6 +56,11 @@ authRoutes.post('/login', async (req, res) => {
 });
 
 authRoutes.post('/register', async (req, res) => {
+  if (!studentRegistrationEnabled) {
+    res.status(403).json({ message: 'Cadastro de usuario tipo 2 ainda nao esta disponivel.' });
+    return;
+  }
+
   const parsed = registerSchema.safeParse(req.body);
 
   if (!parsed.success) {

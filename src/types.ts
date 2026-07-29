@@ -25,6 +25,7 @@ export type Aluno = {
   id: string;
   nome: string;
   apelido?: string | null;
+  foto?: string | null;
   emailResponsavel?: string;
   celular?: string;
   dataNascimento?: string;

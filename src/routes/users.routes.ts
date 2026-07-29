@@ -20,12 +20,18 @@ const paymentDaySchema = z
     return Number.isInteger(day) && day >= 1 && day <= 31;
   }, 'Informe o dia de pagamento entre 1 e 31.');
 
+const birthDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data de nascimento no formato AAAA-MM-DD.');
+
 const alunoSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do aluno.'),
   apelido: z.string().trim().optional(),
+  foto: z.string().trim().optional(),
   emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
   celular: z.string().trim().optional(),
-  dataNascimento: z.string().trim().optional(),
+  dataNascimento: birthDateSchema,
   dataPagamento: paymentDaySchema.optional(),
   faixaAtual: z.string().trim().optional(),
   graus: z.number().int().min(0).max(10).optional(),
@@ -86,9 +92,10 @@ usersRoutes.post('/:userId/autorizar', async (req, res) => {
       id: randomUUID(),
       nome: parsed.data.aluno.nome,
       apelido: parsed.data.aluno.apelido || null,
+      foto: parsed.data.aluno.foto || null,
       emailResponsavel: parsed.data.aluno.emailResponsavel || undefined,
       celular: parsed.data.aluno.celular || undefined,
-      dataNascimento: parsed.data.aluno.dataNascimento || undefined,
+      dataNascimento: parsed.data.aluno.dataNascimento,
       dataPagamento: parsed.data.aluno.dataPagamento || null,
       pagamentoPago: false,
       pagamentoReferencia: null,

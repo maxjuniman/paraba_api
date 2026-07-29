@@ -19,12 +19,18 @@ const paymentDaySchema = z
     return Number.isInteger(day) && day >= 1 && day <= 31;
   }, 'Informe o dia de pagamento entre 1 e 31.');
 
+const birthDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data de nascimento no formato AAAA-MM-DD.');
+
 const alunoSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do aluno.'),
   apelido: z.string().trim().optional(),
+  foto: z.string().trim().optional(),
   emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
   celular: z.string().trim().optional(),
-  dataNascimento: z.string().trim().optional(),
+  dataNascimento: birthDateSchema,
   dataPagamento: paymentDaySchema.optional(),
   faixaAtual: z.string().trim().optional(),
   graus: z.number().int().min(0).max(10).optional(),
@@ -65,17 +71,19 @@ function attendanceSummary(database: Awaited<ReturnType<typeof readDatabase>>, a
   };
 }
 
+function alunoWithDetails(database: Awaited<ReturnType<typeof readDatabase>>, aluno: Aluno): Aluno {
+  const user = database.users.find((item) => item.id === aluno.userId);
+  return {
+    ...aluno,
+    user: userPreview(user),
+    ...attendanceSummary(database, aluno.id),
+  };
+}
+
 async function alunosWithUsers(): Promise<Aluno[]> {
   const database = await readDatabase();
   return database.alunos
-    .map((aluno) => {
-      const user = database.users.find((item) => item.id === aluno.userId);
-      return {
-        ...aluno,
-        user: userPreview(user),
-        ...attendanceSummary(database, aluno.id),
-      };
-    })
+    .map((aluno) => alunoWithDetails(database, aluno))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -96,9 +104,10 @@ alunosRoutes.post('/', async (req, res) => {
     id: randomUUID(),
     nome: parsed.data.nome,
     apelido: parsed.data.apelido || null,
+    foto: parsed.data.foto || null,
     emailResponsavel: parsed.data.emailResponsavel || undefined,
     celular: parsed.data.celular || undefined,
-    dataNascimento: parsed.data.dataNascimento || undefined,
+    dataNascimento: parsed.data.dataNascimento,
     dataPagamento: parsed.data.dataPagamento || null,
     pagamentoPago: false,
     pagamentoReferencia: null,
@@ -115,6 +124,37 @@ alunosRoutes.post('/', async (req, res) => {
   await writeDatabase(database);
 
   res.status(201).json({ data: aluno });
+});
+
+alunosRoutes.patch('/:alunoId', async (req, res) => {
+  const parsed = alunoSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+    return;
+  }
+
+  const database = await readDatabase();
+  const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+  if (!aluno) {
+    res.status(404).json({ message: 'Aluno nao encontrado.' });
+    return;
+  }
+
+  aluno.nome = parsed.data.nome;
+  aluno.apelido = parsed.data.apelido || null;
+  aluno.foto = parsed.data.foto || null;
+  aluno.emailResponsavel = parsed.data.emailResponsavel || undefined;
+  aluno.celular = parsed.data.celular || undefined;
+  aluno.dataNascimento = parsed.data.dataNascimento;
+  aluno.dataPagamento = parsed.data.dataPagamento || null;
+  aluno.faixaAtual = parsed.data.faixaAtual || null;
+  aluno.graus = parsed.data.graus ?? 0;
+
+  await writeDatabase(database);
+
+  res.json({ data: alunoWithDetails(database, aluno) });
 });
 
 alunosRoutes.post('/:alunoId/vincular-user', async (req, res) => {
