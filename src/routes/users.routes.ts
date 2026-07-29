@@ -2,10 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { toPublicUser } from '../lib/auth.js';
-import { readDatabase, writeDatabase } from '../lib/db.js';
+import { insertAluno, readDatabase, updateAluno, updateUser } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
-import type { Aluno } from '../types.js';
 
 export const usersRoutes = Router();
 
@@ -46,89 +45,93 @@ const autorizarSchema = z
     message: 'Informe um aluno existente ou os dados para cadastrar um novo aluno.',
   });
 
-usersRoutes.get('/pendentes', async (_req, res) => {
-  const database = await readDatabase();
-  const users = database.users
-    .filter((user) => user.tipo === 2 && user.ativo === false)
-    .map(toPublicUser)
-    .sort((a, b) => a.nome.localeCompare(b.nome));
+usersRoutes.get('/pendentes', async (_req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const users = database.users
+      .filter((user) => user.tipo === 2 && user.ativo === false)
+      .map(toPublicUser)
+      .sort((a, b) => a.nome.localeCompare(b.nome));
 
-  res.json({ data: users });
+    res.json({ data: users });
+  } catch (error) {
+    next(error);
+  }
 });
 
-usersRoutes.post('/:userId/autorizar', async (req, res) => {
-  const parsed = autorizarSchema.safeParse(req.body);
+usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
+  try {
+    const parsed = autorizarSchema.safeParse(req.body);
 
-  if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
-    return;
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const user = database.users.find((item) => item.id === req.params.userId);
+
+    if (!user) {
+      res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return;
+    }
+
+    if (user.tipo !== 2) {
+      res.status(400).json({ message: 'Apenas usuarios alunos podem ser autorizados por este fluxo.' });
+      return;
+    }
+
+    let aluno = parsed.data.aluno_id
+      ? database.alunos.find((item) => item.id === parsed.data.aluno_id)
+      : undefined;
+
+    if (parsed.data.aluno_id && !aluno) {
+      res.status(404).json({ message: 'Aluno nao encontrado.' });
+      return;
+    }
+
+    if (!aluno && parsed.data.aluno) {
+      const now = new Date().toISOString();
+      aluno = await insertAluno({
+        id: randomUUID(),
+        nome: parsed.data.aluno.nome,
+        apelido: parsed.data.aluno.apelido || null,
+        foto: parsed.data.aluno.foto || null,
+        emailResponsavel: parsed.data.aluno.emailResponsavel || undefined,
+        celular: parsed.data.aluno.celular || undefined,
+        dataNascimento: parsed.data.aluno.dataNascimento,
+        dataPagamento: parsed.data.aluno.dataPagamento || null,
+        pagamentoPago: false,
+        pagamentoReferencia: null,
+        pagamentosPagos: [],
+        faixaAtual: parsed.data.aluno.faixaAtual || null,
+        graus: parsed.data.aluno.graus ?? 0,
+        userId: null,
+        user: null,
+        createdAt: now,
+      });
+    }
+
+    if (!aluno) {
+      res.status(400).json({ message: 'Informe o aluno para vincular.' });
+      return;
+    }
+
+    if (aluno.userId && aluno.userId !== user.id) {
+      res.status(409).json({ message: 'Este aluno ja esta vinculado a outro usuario.' });
+      return;
+    }
+
+    const updatedAluno = await updateAluno({ ...aluno, userId: user.id });
+    const updatedUser = await updateUser({ ...user, ativo: true, alunoId: aluno.id });
+
+    res.json({
+      data: {
+        user: toPublicUser(updatedUser),
+        aluno: updatedAluno,
+      },
+    });
+  } catch (error) {
+    next(error);
   }
-
-  const database = await readDatabase();
-  const user = database.users.find((item) => item.id === req.params.userId);
-
-  if (!user) {
-    res.status(404).json({ message: 'Usuario nao encontrado.' });
-    return;
-  }
-
-  if (user.tipo !== 2) {
-    res.status(400).json({ message: 'Apenas usuarios alunos podem ser autorizados por este fluxo.' });
-    return;
-  }
-
-  let aluno = parsed.data.aluno_id
-    ? database.alunos.find((item) => item.id === parsed.data.aluno_id)
-    : undefined;
-
-  if (parsed.data.aluno_id && !aluno) {
-    res.status(404).json({ message: 'Aluno nao encontrado.' });
-    return;
-  }
-
-  if (!aluno && parsed.data.aluno) {
-    const now = new Date().toISOString();
-    aluno = {
-      id: randomUUID(),
-      nome: parsed.data.aluno.nome,
-      apelido: parsed.data.aluno.apelido || null,
-      foto: parsed.data.aluno.foto || null,
-      emailResponsavel: parsed.data.aluno.emailResponsavel || undefined,
-      celular: parsed.data.aluno.celular || undefined,
-      dataNascimento: parsed.data.aluno.dataNascimento,
-      dataPagamento: parsed.data.aluno.dataPagamento || null,
-      pagamentoPago: false,
-      pagamentoReferencia: null,
-      pagamentosPagos: [],
-      faixaAtual: parsed.data.aluno.faixaAtual || null,
-      graus: parsed.data.aluno.graus ?? 0,
-      userId: null,
-      user: null,
-      createdAt: now,
-    } satisfies Aluno;
-    database.alunos.push(aluno);
-  }
-
-  if (!aluno) {
-    res.status(400).json({ message: 'Informe o aluno para vincular.' });
-    return;
-  }
-
-  if (aluno.userId && aluno.userId !== user.id) {
-    res.status(409).json({ message: 'Este aluno ja esta vinculado a outro usuario.' });
-    return;
-  }
-
-  user.ativo = true;
-  user.alunoId = aluno.id;
-  aluno.userId = user.id;
-
-  await writeDatabase(database);
-
-  res.json({
-    data: {
-      user: toPublicUser(user),
-      aluno,
-    },
-  });
 });

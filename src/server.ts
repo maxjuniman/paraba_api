@@ -38,7 +38,11 @@ app.use((_req, res) => {
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error);
-  res.status(500).json({ message: 'Erro interno do servidor.' });
+  const message =
+    error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : 'Erro interno do servidor.';
+  res.status(500).json({ message });
 });
 
 async function start() {

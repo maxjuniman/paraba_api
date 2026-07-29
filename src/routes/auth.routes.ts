@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { signAccessToken, toPublicUser } from '../lib/auth.js';
-import { readDatabase, writeDatabase } from '../lib/db.js';
+import { insertUser, readDatabase } from '../lib/db.js';
 import type { User } from '../types.js';
 
 export const authRoutes = Router();
@@ -85,7 +85,7 @@ authRoutes.post('/register', async (req, res) => {
   }
 
   const now = new Date().toISOString();
-  const user: User = {
+  const user = await insertUser({
     id: randomUUID(),
     nome,
     email,
@@ -95,10 +95,7 @@ authRoutes.post('/register', async (req, res) => {
     ativo: false,
     alunoId: null,
     createdAt: now,
-  };
-
-  database.users.push(user);
-  await writeDatabase(database);
+  });
 
   res.status(201).json({
     message: 'Cadastro enviado. Aguarde a autorizacao do professor para acessar o aplicativo.',
