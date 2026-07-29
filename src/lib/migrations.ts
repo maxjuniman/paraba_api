@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS presencas (
   id TEXT PRIMARY KEY,
   aluno_id TEXT NOT NULL,
   data TEXT NOT NULL,
+  aula_id TEXT,
   presente BOOLEAN NOT NULL DEFAULT FALSE,
   marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   marked_by_user_id TEXT
@@ -71,6 +72,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS tipo INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS aluno_id TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT;
 
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS apelido TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS foto TEXT;
@@ -127,6 +129,7 @@ ALTER TABLE videos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFA
 ALTER TABLE presencas ADD COLUMN IF NOT EXISTS presente BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE presencas ADD COLUMN IF NOT EXISTS marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE presencas ADD COLUMN IF NOT EXISTS marked_by_user_id TEXT;
+ALTER TABLE presencas ADD COLUMN IF NOT EXISTS aula_id TEXT;
 
 ALTER TABLE tipos_aula ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
@@ -145,6 +148,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
 CREATE INDEX IF NOT EXISTS alunos_user_id_idx ON alunos (user_id);
 CREATE INDEX IF NOT EXISTS presencas_aluno_id_idx ON presencas (aluno_id);
 CREATE INDEX IF NOT EXISTS presencas_data_idx ON presencas (data);
+CREATE INDEX IF NOT EXISTS presencas_aula_id_idx ON presencas (aula_id);
+CREATE UNIQUE INDEX IF NOT EXISTS presencas_aluno_data_aula_unique_idx
+  ON presencas (aluno_id, data, aula_id)
+  WHERE aula_id IS NOT NULL;
 `;
 
 export async function runMigrations(pool: Pool | PoolClient): Promise<void> {

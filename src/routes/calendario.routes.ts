@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { readDatabase, writeDatabase } from '../lib/db.js';
+import { readDatabase, writeDatabase, listActivePushTokens } from '../lib/db.js';
+import { notifyAulaAvulsaCriada } from '../lib/pushNotifications.js';
 import { authRequired } from '../middleware/authRequired.js';
 import type { AulaCalendario, AulaCategoria, TipoAula } from '../types.js';
 
@@ -57,7 +58,11 @@ function monthRange(month?: string) {
   };
 }
 
-function expandMonth(aula: AulaCalendario, month?: string) {
+function expandMonth(
+  aula: AulaCalendario,
+  month: string | undefined,
+  database: Awaited<ReturnType<typeof readDatabase>>
+) {
   const range = monthRange(month);
 
   return Array.from({ length: range.daysInMonth }, (_, index) => {
@@ -67,10 +72,25 @@ function expandMonth(aula: AulaCalendario, month?: string) {
 
     if (!aula.diasSemana.includes(diaSemana)) return null;
 
+    const data = `${range.month}-${String(day).padStart(2, '0')}`;
+    const presentes = database.presencas
+      .filter((presenca) => presenca.aulaId === aula.id && presenca.data === data && presenca.presente)
+      .map((presenca) => {
+        const aluno = database.alunos.find((item) => item.id === presenca.alunoId);
+        if (!aluno) return null;
+        return {
+          id: aluno.id,
+          nome: aluno.nome,
+          apelido: aluno.apelido ?? null,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item != null)
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+
     return {
-      id: `${aula.id}-${range.month}-${String(day).padStart(2, '0')}`,
+      id: `${aula.id}-${data}`,
       aulaId: aula.id,
-      data: `${range.month}-${String(day).padStart(2, '0')}`,
+      data,
       diaSemana,
       hora: aula.hora,
       categoria: aula.categoria,
@@ -78,6 +98,8 @@ function expandMonth(aula: AulaCalendario, month?: string) {
         id: aula.tipoAulaId,
         nome: aula.tipoAulaNome,
       },
+      presentes,
+      totalPresentes: presentes.length,
     };
   }).filter((item): item is NonNullable<typeof item> => item != null);
 }
@@ -134,7 +156,7 @@ calendarioRoutes.get('/', async (req, res) => {
   const database = await readDatabase();
   const range = monthRange(parsedMonth.data);
   const aulas = database.aulasCalendario
-    .flatMap((aula) => expandMonth(aula, range.month))
+    .flatMap((aula) => expandMonth(aula, range.month, database))
     .sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
 
   res.json({ data: { mes: range.month, aulas } });
@@ -188,6 +210,17 @@ calendarioRoutes.post('/aulas', async (req, res) => {
 
   database.aulasCalendario.push(aula);
   await writeDatabase(database);
+
+  const isAulaAvulsa =
+    tipoAula.id === DEFAULT_TIPO_AULA.id || tipoAula.nome.trim().toLowerCase() === 'aula avulsa';
+
+  if (isAulaAvulsa) {
+    void listActivePushTokens()
+      .then((tokens) => notifyAulaAvulsaCriada(tokens))
+      .catch((error) => {
+        console.error('Falha ao notificar aula avulsa:', error);
+      });
+  }
 
   res.status(201).json({ data: aula });
 });

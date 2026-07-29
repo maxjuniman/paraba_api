@@ -9,6 +9,7 @@ export type User = {
   tipo: UserType;
   ativo: boolean;
   alunoId?: string | null;
+  pushToken?: string | null;
   createdAt: string;
 };
 
@@ -47,6 +48,7 @@ export type Presenca = {
   id: string;
   alunoId: string;
   data: string;
+  aulaId?: string | null;
   presente: boolean;
   markedAt: string;
   markedByUserId?: string | null;
@@ -55,6 +57,25 @@ export type Presenca = {
 export type PresencaDiaAluno = Aluno & {
   presente: boolean;
   presenca?: Presenca | null;
+};
+
+export type AulaCategoria = 'all' | 'kids' | 'juvenil' | 'adulto';
+
+export type PresencaAulaDoDia = {
+  aulaId: string;
+  hora: string;
+  categoria: AulaCategoria;
+  tipoAula: {
+    id: string;
+    nome: string;
+  };
+};
+
+export type PresencaDia = {
+  data: string;
+  aulas: PresencaAulaDoDia[];
+  aulaSelecionada?: PresencaAulaDoDia | null;
+  alunos: PresencaDiaAluno[];
 };
 
 export type VideoUpdate = {
@@ -71,8 +92,6 @@ export type TipoAula = {
   nome: string;
   createdAt: string;
 };
-
-export type AulaCategoria = 'all' | 'kids' | 'juvenil' | 'adulto';
 
 export type AulaCalendario = {
   id: string;

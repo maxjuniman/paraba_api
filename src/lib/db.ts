@@ -36,6 +36,7 @@ function mapUser(row: Record<string, unknown>): User {
     tipo: Number(row.tipo) as User['tipo'],
     ativo: asBoolean(row.ativo, Number(row.tipo) === 1),
     alunoId: (row.aluno_id as string | null | undefined) ?? null,
+    pushToken: (row.push_token as string | null | undefined) ?? null,
     createdAt: asIso(row.created_at),
   };
 }
@@ -91,6 +92,7 @@ async function readPostgresDatabase(): Promise<Database> {
         id: row.id,
         alunoId: row.aluno_id,
         data: row.data,
+        aulaId: row.aula_id ?? null,
         presente: row.presente,
         markedAt: asIso(row.marked_at),
         markedByUserId: row.marked_by_user_id,
@@ -205,7 +207,8 @@ export async function updateUser(user: User): Promise<User> {
       password_hash = COALESCE(NULLIF($5, ''), password_hash),
       tipo = $6,
       ativo = $7,
-      aluno_id = $8
+      aluno_id = $8,
+      push_token = COALESCE($9, push_token)
     WHERE id = $1
     RETURNING *`,
     [
@@ -217,6 +220,7 @@ export async function updateUser(user: User): Promise<User> {
       user.tipo,
       asBoolean(user.ativo, user.tipo === 1),
       user.alunoId ?? null,
+      user.pushToken ?? null,
     ]
   );
 
@@ -225,6 +229,38 @@ export async function updateUser(user: User): Promise<User> {
   }
 
   return mapUser(rows[0]);
+}
+
+export async function updateUserPushToken(userId: string, pushToken: string | null): Promise<User> {
+  await ensurePostgres();
+
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET push_token = $2
+     WHERE id = $1
+     RETURNING *`,
+    [userId, pushToken]
+  );
+
+  if (!rows[0]) {
+    throw new Error('Usuario nao encontrado.');
+  }
+
+  return mapUser(rows[0]);
+}
+
+export async function listActivePushTokens(): Promise<string[]> {
+  await ensurePostgres();
+
+  const { rows } = await pool.query<{ push_token: string }>(
+    `SELECT push_token
+     FROM users
+     WHERE ativo = TRUE
+       AND push_token IS NOT NULL
+       AND TRIM(push_token) <> ''`
+  );
+
+  return [...new Set(rows.map((row) => row.push_token.trim()))];
 }
 
 export async function insertUser(user: User): Promise<User> {
@@ -346,11 +382,12 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
 
     for (const presenca of database.presencas) {
       await client.query(
-        `INSERT INTO presencas (id, aluno_id, data, presente, marked_at, marked_by_user_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO presencas (id, aluno_id, data, aula_id, presente, marked_at, marked_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO UPDATE SET
            aluno_id = EXCLUDED.aluno_id,
            data = EXCLUDED.data,
+           aula_id = EXCLUDED.aula_id,
            presente = EXCLUDED.presente,
            marked_at = EXCLUDED.marked_at,
            marked_by_user_id = EXCLUDED.marked_by_user_id`,
@@ -358,6 +395,7 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
           presenca.id,
           presenca.alunoId,
           presenca.data,
+          presenca.aulaId ?? null,
           presenca.presente,
           presenca.markedAt,
           presenca.markedByUserId ?? null,

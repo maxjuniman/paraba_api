@@ -6,6 +6,7 @@ import { initDatabase } from './lib/db.js';
 import { alunosRoutes } from './routes/alunos.routes.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { calendarioRoutes } from './routes/calendario.routes.js';
+import { devicesRoutes } from './routes/devices.routes.js';
 import { equipeRoutes } from './routes/equipe.routes.js';
 import { presencasRoutes } from './routes/presencas.routes.js';
 import { usersRoutes } from './routes/users.routes.js';
@@ -27,6 +28,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/alunos', alunosRoutes);
 app.use('/api/calendario', calendarioRoutes);
+app.use('/api/devices', devicesRoutes);
 app.use('/api/equipe', equipeRoutes);
 app.use('/api/presencas', presencasRoutes);
 app.use('/api/users', usersRoutes);
