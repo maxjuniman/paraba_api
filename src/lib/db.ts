@@ -1,13 +1,8 @@
-import { Pool } from 'pg';
-import { env } from '../config/env.js';
+import { createPgPool } from './pgPool.js';
 import { runMigrations } from './migrations.js';
 import type { Aluno, AulaCalendario, Database, Presenca, TipoAula, User, VideoUpdate } from '../types.js';
 
-const pool = new Pool({
-  connectionString: env.databaseUrl,
-  ssl: env.databaseSsl ? { rejectUnauthorized: false } : undefined,
-});
-
+const pool = createPgPool();
 let postgresReady: Promise<void> | null = null;
 
 function asIso(value: unknown): string {

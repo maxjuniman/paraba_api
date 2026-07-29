@@ -1,12 +1,8 @@
-import { Pool } from 'pg';
-import { env } from '../config/env.js';
+import { createPgPool } from '../lib/pgPool.js';
 import { runMigrations } from '../lib/migrations.js';
 
 async function migrate() {
-  const pool = new Pool({
-    connectionString: env.databaseUrl,
-    ssl: env.databaseSsl ? { rejectUnauthorized: false } : undefined,
-  });
+  const pool = createPgPool();
 
   try {
     console.log('Rodando migrations no PostgreSQL...');

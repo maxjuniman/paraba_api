@@ -19,7 +19,7 @@ A API usa **somente PostgreSQL**. Nao existe mais `db.json`.
 `DATABASE_URL` e obrigatorio:
 
 ```env
-DATABASE_URL=postgres://usuario:senha@localhost:5432/paraba_api
+DATABASE_URL=postgres://usuario:senha@127.0.0.1:5432/paraba_api
 DATABASE_SSL=false
 ```
 
