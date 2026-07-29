@@ -12,6 +12,7 @@ const emptyDatabase: Database = {
   users: [],
   alunos: [],
   videos: [],
+  presencas: [],
 };
 
 async function ensureDatabase(): Promise<void> {
@@ -27,7 +28,14 @@ async function ensureDatabase(): Promise<void> {
 export async function readDatabase(): Promise<Database> {
   await ensureDatabase();
   const raw = await readFile(dbPath, 'utf8');
-  return JSON.parse(raw) as Database;
+  const database = JSON.parse(raw) as Partial<Database>;
+
+  return {
+    users: database.users ?? [],
+    alunos: database.alunos ?? [],
+    videos: database.videos ?? [],
+    presencas: database.presencas ?? [],
+  };
 }
 
 export async function writeDatabase(database: Database): Promise<void> {

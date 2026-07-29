@@ -53,6 +53,18 @@ function userPreview(user?: PublicUser | null) {
   };
 }
 
+function attendanceSummary(database: Awaited<ReturnType<typeof readDatabase>>, alunoId: string) {
+  const presencas = database.presencas
+    .filter((presenca) => presenca.alunoId === alunoId && presenca.presente)
+    .sort((a, b) => b.data.localeCompare(a.data));
+
+  return {
+    presencas,
+    totalPresencas: presencas.length,
+    ultimaPresenca: presencas[0]?.data ?? null,
+  };
+}
+
 async function alunosWithUsers(): Promise<Aluno[]> {
   const database = await readDatabase();
   return database.alunos
@@ -61,6 +73,7 @@ async function alunosWithUsers(): Promise<Aluno[]> {
       return {
         ...aluno,
         user: userPreview(user),
+        ...attendanceSummary(database, aluno.id),
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

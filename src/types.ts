@@ -36,7 +36,24 @@ export type Aluno = {
   graus?: number | null;
   userId?: string | null;
   user?: Pick<PublicUser, 'id' | 'nome' | 'email' | 'ativo'> | null;
+  presencas?: Presenca[];
+  totalPresencas?: number;
+  ultimaPresenca?: string | null;
   createdAt: string;
+};
+
+export type Presenca = {
+  id: string;
+  alunoId: string;
+  data: string;
+  presente: boolean;
+  markedAt: string;
+  markedByUserId?: string | null;
+};
+
+export type PresencaDiaAluno = Aluno & {
+  presente: boolean;
+  presenca?: Presenca | null;
 };
 
 export type VideoUpdate = {
@@ -52,4 +69,5 @@ export type Database = {
   users: User[];
   alunos: Aluno[];
   videos: VideoUpdate[];
+  presencas: Presenca[];
 };

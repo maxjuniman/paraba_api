@@ -1,6 +1,6 @@
 # Paraba API
 
-Backend inicial do aplicativo Paraba com login, cadastro de usuario aluno, autorizacao pelo professor, cadastro de aluno e atualizacoes de videos.
+Backend inicial do aplicativo Paraba com login, cadastro de usuario aluno, autorizacao pelo professor, cadastro de aluno, lista de presenca diaria e atualizacoes de videos.
 
 ## Como rodar
 
@@ -28,6 +28,8 @@ EXPO_PUBLIC_PARABA_API_URL=https://apiparaba.maxfoot.com.br/api
 - `POST /api/alunos`: cadastra aluno.
 - `POST /api/alunos/:alunoId/vincular-user`: vincula aluno a usuario.
 - `PATCH /api/alunos/:alunoId/pagamento`: atualiza data de pagamento.
+- `GET /api/presencas?data=AAAA-MM-DD`: lista os alunos do dia com status de presenca.
+- `PATCH /api/presencas/:data/alunos/:alunoId/toggle`: marca/desmarca presenca do aluno no dia.
 - `GET /api/videos`: lista videos publicados.
 - `POST /api/videos`: publica atualizacao de video.
 
