@@ -81,6 +81,33 @@ ALTER TABLE alunos ADD COLUMN IF NOT EXISTS data_pagamento TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS pagamento_pago BOOLEAN;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS pagamento_referencia TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS pagamentos_pagos JSONB DEFAULT '[]'::jsonb;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'alunos'
+      AND column_name = 'data_pagamento'
+      AND data_type IN ('date', 'timestamp without time zone', 'timestamp with time zone')
+  ) THEN
+    ALTER TABLE alunos
+      ALTER COLUMN data_pagamento TYPE TEXT
+      USING EXTRACT(DAY FROM data_pagamento)::integer::text;
+  ELSIF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'alunos'
+      AND column_name = 'data_pagamento'
+      AND data_type <> 'text'
+  ) THEN
+    ALTER TABLE alunos
+      ALTER COLUMN data_pagamento TYPE TEXT
+      USING TRIM(data_pagamento::text);
+  END IF;
+END $$;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS faixa_atual TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS graus INTEGER DEFAULT 0;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS user_id TEXT;
