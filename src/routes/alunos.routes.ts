@@ -89,6 +89,7 @@ alunosRoutes.post('/', async (req, res) => {
     dataPagamento: parsed.data.dataPagamento || null,
     pagamentoPago: false,
     pagamentoReferencia: null,
+    pagamentosPagos: [],
     faixaAtual: parsed.data.faixaAtual || null,
     graus: parsed.data.graus ?? 0,
     userId: null,
@@ -171,6 +172,18 @@ alunosRoutes.patch('/:alunoId/pagamento-status', async (req, res) => {
     return;
   }
 
+  const pagamentosPagos = new Set(
+    aluno.pagamentosPagos ??
+      (aluno.pagamentoPago && aluno.pagamentoReferencia ? [aluno.pagamentoReferencia] : [])
+  );
+
+  if (parsed.data.pago) {
+    pagamentosPagos.add(parsed.data.referencia);
+  } else {
+    pagamentosPagos.delete(parsed.data.referencia);
+  }
+
+  aluno.pagamentosPagos = [...pagamentosPagos].sort();
   aluno.pagamentoPago = parsed.data.pago;
   aluno.pagamentoReferencia = parsed.data.referencia;
   await writeDatabase(database);

@@ -31,6 +31,7 @@ export type Aluno = {
   dataPagamento?: string | null;
   pagamentoPago?: boolean | null;
   pagamentoReferencia?: string | null;
+  pagamentosPagos?: string[] | null;
   faixaAtual?: string | null;
   graus?: number | null;
   userId?: string | null;

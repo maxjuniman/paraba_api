@@ -92,6 +92,7 @@ usersRoutes.post('/:userId/autorizar', async (req, res) => {
       dataPagamento: parsed.data.aluno.dataPagamento || null,
       pagamentoPago: false,
       pagamentoReferencia: null,
+      pagamentosPagos: [],
       faixaAtual: parsed.data.aluno.faixaAtual || null,
       graus: parsed.data.aluno.graus ?? 0,
       userId: null,
