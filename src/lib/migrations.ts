@@ -91,6 +91,33 @@ BEGIN
     FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name = 'alunos'
+      AND column_name = 'data_nascimento'
+      AND data_type IN ('date', 'timestamp without time zone', 'timestamp with time zone')
+  ) THEN
+    ALTER TABLE alunos
+      ALTER COLUMN data_nascimento TYPE TEXT
+      USING to_char(data_nascimento::timestamp, 'YYYY-MM-DD');
+  ELSIF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'alunos'
+      AND column_name = 'data_nascimento'
+      AND data_type = 'text'
+  ) THEN
+    UPDATE alunos
+    SET data_nascimento = LEFT(data_nascimento, 10)
+    WHERE data_nascimento ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'alunos'
       AND column_name = 'data_pagamento'
       AND data_type IN ('date', 'timestamp without time zone', 'timestamp with time zone')
   ) THEN

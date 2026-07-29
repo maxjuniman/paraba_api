@@ -11,6 +11,32 @@ function asIso(value: unknown): string {
   return new Date().toISOString();
 }
 
+/** Normaliza data de nascimento para AAAA-MM-DD (evita Date/ISO com horario do pg). */
+function asDateOnly(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getUTCFullYear();
+    const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(value.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s]/);
+  if (isoMatch) return isoMatch[1];
+
+  const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brMatch) {
+    const [, day, month, year] = brMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  return undefined;
+}
+
 function asBoolean(value: unknown, fallback = false): boolean {
   if (typeof value === 'boolean') return value;
   if (value == null) return fallback;
@@ -49,7 +75,7 @@ function mapAluno(row: Record<string, unknown>): Aluno {
     foto: (row.foto as string | null | undefined) ?? null,
     emailResponsavel: (row.email_responsavel as string | null | undefined) ?? undefined,
     celular: (row.celular as string | null | undefined) ?? undefined,
-    dataNascimento: (row.data_nascimento as string | null | undefined) ?? undefined,
+    dataNascimento: asDateOnly(row.data_nascimento),
     dataPagamento: (row.data_pagamento as string | null | undefined) ?? null,
     pagamentoPago: (row.pagamento_pago as boolean | null | undefined) ?? null,
     pagamentoReferencia: (row.pagamento_referencia as string | null | undefined) ?? null,
@@ -136,7 +162,7 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
       aluno.foto ?? null,
       aluno.emailResponsavel ?? null,
       aluno.celular ?? null,
-      aluno.dataNascimento ?? null,
+      asDateOnly(aluno.dataNascimento) ?? null,
       aluno.dataPagamento == null ? null : String(aluno.dataPagamento),
       aluno.pagamentoPago ?? false,
       aluno.pagamentoReferencia ?? null,
@@ -178,7 +204,7 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       aluno.foto ?? null,
       aluno.emailResponsavel ?? null,
       aluno.celular ?? null,
-      aluno.dataNascimento ?? null,
+      asDateOnly(aluno.dataNascimento) ?? null,
       aluno.dataPagamento == null ? null : String(aluno.dataPagamento),
       aluno.pagamentoPago ?? false,
       aluno.pagamentoReferencia ?? null,
@@ -354,7 +380,7 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
           aluno.foto ?? null,
           aluno.emailResponsavel ?? null,
           aluno.celular ?? null,
-          aluno.dataNascimento ?? null,
+          asDateOnly(aluno.dataNascimento) ?? null,
           aluno.dataPagamento == null ? null : String(aluno.dataPagamento),
           aluno.pagamentoPago ?? false,
           aluno.pagamentoReferencia ?? null,

@@ -32,7 +32,8 @@ function userPreview(user?: PublicUser | null) {
 
 function calculateAge(isoDate?: string | null, referenceDate = new Date()): number | null {
   if (!isoDate) return null;
-  const [year, month, day] = isoDate.split('-').map(Number);
+  const dateOnly = isoDate.trim().slice(0, 10);
+  const [year, month, day] = dateOnly.split('-').map(Number);
   if (!year || !month || !day) return null;
 
   let age = referenceDate.getFullYear() - year;
