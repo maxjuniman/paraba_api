@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
+import { studentCategories } from '../config/studentCategories.js';
 import { readDatabase, writeDatabase, listActivePushTokens } from '../lib/db.js';
 import { notifyAulaAvulsaCriada } from '../lib/pushNotifications.js';
 import { authRequired } from '../middleware/authRequired.js';
-import type { AulaCalendario, AulaCategoria, TipoAula } from '../types.js';
+import type { Aluno, AulaCalendario, AulaCategoria, TipoAula } from '../types.js';
 
 export const calendarioRoutes = Router();
 
@@ -37,6 +38,61 @@ const aulaSchema = z
 
 function isProfessor(tipo?: number | string): boolean {
   return tipo === 1 || tipo === 'admin' || tipo === 'professor';
+}
+
+function isAluno(tipo?: number | string): boolean {
+  return tipo === 2 || tipo === 'aluno';
+}
+
+function calculateAge(isoDate?: string | null, referenceDate = new Date()): number | null {
+  if (!isoDate) return null;
+  const dateOnly = isoDate.trim().slice(0, 10);
+  const [year, month, day] = dateOnly.split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  let age = referenceDate.getFullYear() - year;
+  const currentMonth = referenceDate.getMonth() + 1;
+  const currentDay = referenceDate.getDate();
+  if (currentMonth < month || (currentMonth === month && currentDay < day)) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function studentCategoryId(isoDate?: string | null): Exclude<AulaCategoria, 'all'> | null {
+  const age = calculateAge(isoDate);
+  if (age == null) return null;
+
+  const category = studentCategories.find((item) => {
+    const afterMin = age >= item.minAge;
+    const beforeMax = !('maxAge' in item) || item.maxAge == null || age <= item.maxAge;
+    return afterMin && beforeMax;
+  });
+
+  return category?.id ?? null;
+}
+
+function findLinkedAluno(
+  alunos: Aluno[],
+  userId?: string,
+  alunoId?: string | null
+): Aluno | undefined {
+  if (!userId) return undefined;
+  if (alunoId) {
+    const byId = alunos.find((aluno) => aluno.id === alunoId);
+    if (byId) return byId;
+  }
+  return alunos.find((aluno) => aluno.userId === userId);
+}
+
+function aulaMatchesStudentCategory(
+  aulaCategoria: AulaCategoria,
+  studentCategory: Exclude<AulaCategoria, 'all'> | null
+): boolean {
+  if (aulaCategoria === 'all') return true;
+  if (!studentCategory) return false;
+  return aulaCategoria === studentCategory;
 }
 
 function allTiposAula(database: Awaited<ReturnType<typeof readDatabase>>): TipoAula[] {
@@ -155,7 +211,18 @@ calendarioRoutes.get('/', async (req, res) => {
 
   const database = await readDatabase();
   const range = monthRange(parsedMonth.data);
-  const aulas = database.aulasCalendario
+
+  let aulasCalendario = database.aulasCalendario;
+
+  if (isAluno(req.user?.tipo)) {
+    const aluno = findLinkedAluno(database.alunos, req.user?.id, req.user?.alunoId);
+    const studentCategory = studentCategoryId(aluno?.dataNascimento);
+    aulasCalendario = aulasCalendario.filter((aula) =>
+      aulaMatchesStudentCategory(aula.categoria, studentCategory)
+    );
+  }
+
+  const aulas = aulasCalendario
     .flatMap((aula) => expandMonth(aula, range.month, database))
     .sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
 
