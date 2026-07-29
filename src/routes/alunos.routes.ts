@@ -38,12 +38,18 @@ const pagamentoSchema = z.object({
   data_pagamento: paymentDaySchema,
 });
 
+const pagamentoStatusSchema = z.object({
+  pago: z.boolean(),
+  referencia: z.string().trim().regex(/^\d{4}-\d{2}$/, 'Informe a referencia no formato AAAA-MM.'),
+});
+
 function userPreview(user?: PublicUser | null) {
   if (!user) return null;
   return {
     id: user.id,
     nome: user.nome,
     email: user.email,
+    ativo: user.ativo ?? true,
   };
 }
 
@@ -81,6 +87,8 @@ alunosRoutes.post('/', async (req, res) => {
     celular: parsed.data.celular || undefined,
     dataNascimento: parsed.data.dataNascimento || undefined,
     dataPagamento: parsed.data.dataPagamento || null,
+    pagamentoPago: false,
+    pagamentoReferencia: null,
     faixaAtual: parsed.data.faixaAtual || null,
     graus: parsed.data.graus ?? 0,
     userId: null,
@@ -144,5 +152,56 @@ alunosRoutes.patch('/:alunoId/pagamento', async (req, res) => {
   await writeDatabase(database);
 
   const user = database.users.find((item) => item.id === aluno.userId);
+  res.json({ data: { ...aluno, user: userPreview(user) } });
+});
+
+alunosRoutes.patch('/:alunoId/pagamento-status', async (req, res) => {
+  const parsed = pagamentoStatusSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+    return;
+  }
+
+  const database = await readDatabase();
+  const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+  if (!aluno) {
+    res.status(404).json({ message: 'Aluno nao encontrado.' });
+    return;
+  }
+
+  aluno.pagamentoPago = parsed.data.pago;
+  aluno.pagamentoReferencia = parsed.data.referencia;
+  await writeDatabase(database);
+
+  const user = database.users.find((item) => item.id === aluno.userId);
+  res.json({ data: { ...aluno, user: userPreview(user) } });
+});
+
+alunosRoutes.patch('/:alunoId/desativar-user', async (req, res) => {
+  const database = await readDatabase();
+  const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+  if (!aluno) {
+    res.status(404).json({ message: 'Aluno nao encontrado.' });
+    return;
+  }
+
+  if (!aluno.userId) {
+    res.status(400).json({ message: 'Aluno nao possui usuario vinculado.' });
+    return;
+  }
+
+  const user = database.users.find((item) => item.id === aluno.userId);
+
+  if (!user) {
+    res.status(404).json({ message: 'Usuario vinculado nao encontrado.' });
+    return;
+  }
+
+  user.ativo = false;
+  await writeDatabase(database);
+
   res.json({ data: { ...aluno, user: userPreview(user) } });
 });

@@ -90,6 +90,8 @@ usersRoutes.post('/:userId/autorizar', async (req, res) => {
       celular: parsed.data.aluno.celular || undefined,
       dataNascimento: parsed.data.aluno.dataNascimento || undefined,
       dataPagamento: parsed.data.aluno.dataPagamento || null,
+      pagamentoPago: false,
+      pagamentoReferencia: null,
       faixaAtual: parsed.data.aluno.faixaAtual || null,
       graus: parsed.data.aluno.graus ?? 0,
       userId: null,

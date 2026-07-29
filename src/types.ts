@@ -29,10 +29,12 @@ export type Aluno = {
   celular?: string;
   dataNascimento?: string;
   dataPagamento?: string | null;
+  pagamentoPago?: boolean | null;
+  pagamentoReferencia?: string | null;
   faixaAtual?: string | null;
   graus?: number | null;
   userId?: string | null;
-  user?: Pick<PublicUser, 'id' | 'nome' | 'email'> | null;
+  user?: Pick<PublicUser, 'id' | 'nome' | 'email' | 'ativo'> | null;
   createdAt: string;
 };
 
