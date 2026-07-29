@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS aulas_calendario (
   dias_semana JSONB NOT NULL DEFAULT '[]'::jsonb,
   hora TEXT NOT NULL,
   categoria TEXT NOT NULL DEFAULT 'all',
+  categorias JSONB NOT NULL DEFAULT '["kids","juvenil","adulto"]'::jsonb,
+  recorrencia TEXT NOT NULL DEFAULT 'recorrente',
+  data_unica TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -165,7 +168,19 @@ ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS tipo_aula_nome TEXT;
 ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS dias_semana JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS hora TEXT;
 ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS categorias JSONB;
+ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS recorrencia TEXT NOT NULL DEFAULT 'recorrente';
+ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS data_unica TEXT;
 ALTER TABLE aulas_calendario ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE aulas_calendario
+SET categorias = CASE
+  WHEN categoria IS NULL OR categoria = 'all' THEN '["kids","juvenil","adulto"]'::jsonb
+  ELSE jsonb_build_array(categoria)
+END
+WHERE categorias IS NULL;
+
+DELETE FROM tipos_aula WHERE id = 'aula-avulsa' OR lower(trim(nome)) = 'aula avulsa';
 
 UPDATE users
 SET ativo = TRUE

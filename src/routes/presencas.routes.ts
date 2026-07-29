@@ -89,11 +89,18 @@ function aulasDoDia(aulasCalendario: AulaCalendario[], isoDate: string): Presenc
   const weekday = weekdayFromIsoDate(isoDate);
 
   return aulasCalendario
-    .filter((aula) => aula.diasSemana.includes(weekday))
+    .filter((aula) => {
+      if (aula.recorrencia === 'avulsa') {
+        return aula.dataUnica === isoDate;
+      }
+      return aula.diasSemana.includes(weekday);
+    })
     .map((aula) => ({
       aulaId: aula.id,
       hora: aula.hora,
-      categoria: aula.categoria,
+      categorias: Array.isArray(aula.categorias) && aula.categorias.length > 0
+        ? aula.categorias
+        : (['kids', 'juvenil', 'adulto'] as AulaCategoria[]),
       tipoAula: {
         id: aula.tipoAulaId,
         nome: aula.tipoAulaNome,
@@ -102,9 +109,11 @@ function aulasDoDia(aulasCalendario: AulaCalendario[], isoDate: string): Presenc
     .sort((a, b) => a.hora.localeCompare(b.hora) || a.tipoAula.nome.localeCompare(b.tipoAula.nome));
 }
 
-function alunoMatchesCategoria(aluno: Aluno, categoria: AulaCategoria): boolean {
-  if (categoria === 'all') return true;
-  return studentCategoryId(aluno.dataNascimento) === categoria;
+function alunoMatchesCategorias(aluno: Aluno, categorias?: AulaCategoria[] | null): boolean {
+  if (!categorias?.length) return true;
+  const studentCategory = studentCategoryId(aluno.dataNascimento);
+  if (!studentCategory) return false;
+  return categorias.includes(studentCategory);
 }
 
 function findPresenca(
@@ -134,7 +143,7 @@ presencasRoutes.get('/', async (req, res) => {
 
   const alunos = aulaSelecionada
     ? database.alunos
-        .filter((aluno) => alunoMatchesCategoria(aluno, aulaSelecionada.categoria))
+        .filter((aluno) => alunoMatchesCategorias(aluno, aulaSelecionada.categorias))
         .map((aluno): PresencaDiaAluno => {
           const presenca = findPresenca(database, aluno.id, parsed.data, aulaSelecionada.aulaId);
           return {
@@ -184,7 +193,12 @@ presencasRoutes.patch('/:data/aulas/:aulaId/alunos/:alunoId/toggle', async (req,
     return;
   }
 
-  if (!aula.diasSemana.includes(weekdayFromIsoDate(parsed.data))) {
+  const occursOnDate =
+    aula.recorrencia === 'avulsa'
+      ? aula.dataUnica === parsed.data
+      : aula.diasSemana.includes(weekdayFromIsoDate(parsed.data));
+
+  if (!occursOnDate) {
     res.status(400).json({ message: 'Esta aula nao ocorre na data informada.' });
     return;
   }

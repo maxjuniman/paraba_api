@@ -5,15 +5,11 @@ import { studentCategories } from '../config/studentCategories.js';
 import { readDatabase, writeDatabase, listActivePushTokens } from '../lib/db.js';
 import { notifyAulaAvulsaCriada } from '../lib/pushNotifications.js';
 import { authRequired } from '../middleware/authRequired.js';
-import type { Aluno, AulaCalendario, AulaCategoria, TipoAula } from '../types.js';
+import type { Aluno, AulaCalendario, AulaCategoria, AulaRecorrencia, TipoAula } from '../types.js';
 
 export const calendarioRoutes = Router();
 
-const DEFAULT_TIPO_AULA: TipoAula = {
-  id: 'aula-avulsa',
-  nome: 'Aula avulsa',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
+const CATEGORIA_OPTIONS = ['kids', 'juvenil', 'adulto'] as const;
 
 const monthSchema = z
   .string()
@@ -28,12 +24,46 @@ const aulaSchema = z
   .object({
     tipoAulaId: z.string().trim().optional(),
     novoTipoAula: z.string().trim().optional(),
-    diasSemana: z.array(z.number().int().min(0).max(6)).min(1, 'Selecione ao menos um dia da semana.'),
+    recorrencia: z.enum(['avulsa', 'recorrente']),
+    diasSemana: z.array(z.number().int().min(0).max(6)).optional().default([]),
+    data: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data no formato AAAA-MM-DD.')
+      .optional(),
     hora: z.string().trim().regex(/^\d{2}:\d{2}$/, 'Informe a hora no formato HH:mm.'),
-    categoria: z.enum(['all', 'kids', 'juvenil', 'adulto']),
+    categorias: z
+      .array(z.enum(CATEGORIA_OPTIONS))
+      .min(1, 'Selecione ao menos uma categoria.'),
   })
   .refine((body) => body.tipoAulaId || body.novoTipoAula, {
     message: 'Informe o tipo de aula.',
+  })
+  .superRefine((body, ctx) => {
+    if (body.recorrencia === 'recorrente' && body.diasSemana.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Selecione ao menos um dia da semana.',
+        path: ['diasSemana'],
+      });
+    }
+
+    if (body.recorrencia === 'avulsa') {
+      if (!body.data) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Informe a data da aula avulsa.',
+          path: ['data'],
+        });
+      }
+      if (body.diasSemana.length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Aula avulsa deve ter somente um dia.',
+          path: ['diasSemana'],
+        });
+      }
+    }
   });
 
 function isProfessor(tipo?: number | string): boolean {
@@ -60,7 +90,7 @@ function calculateAge(isoDate?: string | null, referenceDate = new Date()): numb
   return age >= 0 ? age : null;
 }
 
-function studentCategoryId(isoDate?: string | null): Exclude<AulaCategoria, 'all'> | null {
+function studentCategoryId(isoDate?: string | null): AulaCategoria | null {
   const age = calculateAge(isoDate);
   if (age == null) return null;
 
@@ -87,17 +117,34 @@ function findLinkedAluno(
 }
 
 function aulaMatchesStudentCategory(
-  aulaCategoria: AulaCategoria,
-  studentCategory: Exclude<AulaCategoria, 'all'> | null
+  categorias: AulaCategoria[],
+  studentCategory: AulaCategoria | null
 ): boolean {
-  if (aulaCategoria === 'all') return true;
   if (!studentCategory) return false;
-  return aulaCategoria === studentCategory;
+  if (categorias.length === 0) return true;
+  return categorias.includes(studentCategory);
+}
+
+function isUpcomingClass(data: string, hora: string, now = new Date()): boolean {
+  const [year, month, day] = data.split('-').map(Number);
+  const [hours = 0, minutes = 0] = hora.split(':').map(Number);
+  if (!year || !month || !day) return false;
+
+  const classDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return classDate.getTime() > now.getTime();
+}
+
+function weekdayFromIsoDate(isoDate: string): number {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year, month - 1, day).getDay();
 }
 
 function allTiposAula(database: Awaited<ReturnType<typeof readDatabase>>): TipoAula[] {
-  const customTipos = database.tiposAula.filter((tipo) => tipo.id !== DEFAULT_TIPO_AULA.id);
-  return [DEFAULT_TIPO_AULA, ...customTipos].sort((a, b) => a.nome.localeCompare(b.nome));
+  return [...database.tiposAula]
+    .filter(
+      (tipo) => tipo.id !== 'aula-avulsa' && tipo.nome.trim().toLowerCase() !== 'aula avulsa'
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome));
 }
 
 function monthRange(month?: string) {
@@ -121,14 +168,7 @@ function expandMonth(
 ) {
   const range = monthRange(month);
 
-  return Array.from({ length: range.daysInMonth }, (_, index) => {
-    const day = index + 1;
-    const date = new Date(range.year, range.monthIndex, day);
-    const diaSemana = date.getDay();
-
-    if (!aula.diasSemana.includes(diaSemana)) return null;
-
-    const data = `${range.month}-${String(day).padStart(2, '0')}`;
+  const buildOccurrence = (data: string, diaSemana: number) => {
     const presentes = database.presencas
       .filter((presenca) => presenca.aulaId === aula.id && presenca.data === data && presenca.presente)
       .map((presenca) => {
@@ -149,7 +189,8 @@ function expandMonth(
       data,
       diaSemana,
       hora: aula.hora,
-      categoria: aula.categoria,
+      categorias: aula.categorias,
+      recorrencia: aula.recorrencia,
       tipoAula: {
         id: aula.tipoAulaId,
         nome: aula.tipoAulaNome,
@@ -157,6 +198,23 @@ function expandMonth(
       presentes,
       totalPresentes: presentes.length,
     };
+  };
+
+  if (aula.recorrencia === 'avulsa') {
+    if (!aula.dataUnica || !aula.dataUnica.startsWith(`${range.month}-`)) return [];
+    const diaSemana = weekdayFromIsoDate(aula.dataUnica);
+    return [buildOccurrence(aula.dataUnica, diaSemana)];
+  }
+
+  return Array.from({ length: range.daysInMonth }, (_, index) => {
+    const day = index + 1;
+    const date = new Date(range.year, range.monthIndex, day);
+    const diaSemana = date.getDay();
+
+    if (!aula.diasSemana.includes(diaSemana)) return null;
+
+    const data = `${range.month}-${String(day).padStart(2, '0')}`;
+    return buildOccurrence(data, diaSemana);
   }).filter((item): item is NonNullable<typeof item> => item != null);
 }
 
@@ -218,12 +276,26 @@ calendarioRoutes.get('/', async (req, res) => {
     const aluno = findLinkedAluno(database.alunos, req.user?.id, req.user?.alunoId);
     const studentCategory = studentCategoryId(aluno?.dataNascimento);
     aulasCalendario = aulasCalendario.filter((aula) =>
-      aulaMatchesStudentCategory(aula.categoria, studentCategory)
+      aulaMatchesStudentCategory(aula.categorias, studentCategory)
     );
   }
 
   const aulas = aulasCalendario
     .flatMap((aula) => expandMonth(aula, range.month, database))
+    .filter((aula) => !isAluno(req.user?.tipo) || isUpcomingClass(aula.data, aula.hora))
+    .map((aula) => {
+      if (!isAluno(req.user?.tipo)) return aula;
+      return {
+        id: aula.id,
+        aulaId: aula.aulaId,
+        data: aula.data,
+        diaSemana: aula.diaSemana,
+        hora: aula.hora,
+        categorias: aula.categorias,
+        recorrencia: aula.recorrencia,
+        tipoAula: aula.tipoAula,
+      };
+    })
     .sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
 
   res.json({ data: { mes: range.month, aulas } });
@@ -255,7 +327,7 @@ calendarioRoutes.post('/aulas', async (req, res) => {
         createdAt: new Date().toISOString(),
       };
 
-    if (tipoAula.id !== DEFAULT_TIPO_AULA.id && !database.tiposAula.some((tipo) => tipo.id === tipoAula?.id)) {
+    if (!database.tiposAula.some((tipo) => tipo.id === tipoAula?.id)) {
       database.tiposAula.push(tipoAula);
     }
   }
@@ -265,23 +337,32 @@ calendarioRoutes.post('/aulas', async (req, res) => {
     return;
   }
 
+  const recorrencia = parsed.data.recorrencia as AulaRecorrencia;
+  const categorias = [...new Set(parsed.data.categorias)] as AulaCategoria[];
+  const dataUnica = recorrencia === 'avulsa' ? parsed.data.data ?? null : null;
+  const diasSemana =
+    recorrencia === 'avulsa'
+      ? dataUnica
+        ? [weekdayFromIsoDate(dataUnica)]
+        : []
+      : [...new Set(parsed.data.diasSemana)].sort((a, b) => a - b);
+
   const aula: AulaCalendario = {
     id: randomUUID(),
     tipoAulaId: tipoAula.id,
     tipoAulaNome: tipoAula.nome,
-    diasSemana: [...new Set(parsed.data.diasSemana)].sort((a, b) => a - b),
+    diasSemana,
     hora: parsed.data.hora,
-    categoria: parsed.data.categoria as AulaCategoria,
+    categorias,
+    recorrencia,
+    dataUnica,
     createdAt: new Date().toISOString(),
   };
 
   database.aulasCalendario.push(aula);
   await writeDatabase(database);
 
-  const isAulaAvulsa =
-    tipoAula.id === DEFAULT_TIPO_AULA.id || tipoAula.nome.trim().toLowerCase() === 'aula avulsa';
-
-  if (isAulaAvulsa) {
+  if (recorrencia === 'avulsa') {
     void listActivePushTokens()
       .then((tokens) => notifyAulaAvulsaCriada(tokens))
       .catch((error) => {

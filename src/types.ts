@@ -59,12 +59,14 @@ export type PresencaDiaAluno = Aluno & {
   presenca?: Presenca | null;
 };
 
-export type AulaCategoria = 'all' | 'kids' | 'juvenil' | 'adulto';
+export type AulaCategoria = 'kids' | 'juvenil' | 'adulto';
+
+export type AulaRecorrencia = 'avulsa' | 'recorrente';
 
 export type PresencaAulaDoDia = {
   aulaId: string;
   hora: string;
-  categoria: AulaCategoria;
+  categorias: AulaCategoria[];
   tipoAula: {
     id: string;
     nome: string;
@@ -99,7 +101,9 @@ export type AulaCalendario = {
   tipoAulaNome: string;
   diasSemana: number[];
   hora: string;
-  categoria: AulaCategoria;
+  categorias: AulaCategoria[];
+  recorrencia: AulaRecorrencia;
+  dataUnica?: string | null;
   createdAt: string;
 };
 

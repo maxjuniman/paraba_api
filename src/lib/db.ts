@@ -132,15 +132,40 @@ async function readPostgresDatabase(): Promise<Database> {
       })
     ),
     aulasCalendario: aulasCalendario.rows.map(
-      (row): AulaCalendario => ({
-        id: row.id,
-        tipoAulaId: row.tipo_aula_id,
-        tipoAulaNome: row.tipo_aula_nome,
-        diasSemana: row.dias_semana ?? [],
-        hora: row.hora,
-        categoria: row.categoria,
-        createdAt: asIso(row.created_at),
-      })
+      (row): AulaCalendario => {
+        const legacyCategoria = row.categoria as string | null | undefined;
+        const rawCategorias = row.categorias;
+        let categorias: AulaCalendario['categorias'] = [];
+
+        if (Array.isArray(rawCategorias) && rawCategorias.length > 0) {
+          categorias = rawCategorias.filter(
+            (item): item is AulaCalendario['categorias'][number] =>
+              item === 'kids' || item === 'juvenil' || item === 'adulto'
+          );
+        } else if (legacyCategoria === 'all' || !legacyCategoria) {
+          categorias = ['kids', 'juvenil', 'adulto'];
+        } else if (legacyCategoria === 'kids' || legacyCategoria === 'juvenil' || legacyCategoria === 'adulto') {
+          categorias = [legacyCategoria];
+        }
+
+        if (categorias.length === 0) {
+          categorias = ['kids', 'juvenil', 'adulto'];
+        }
+
+        const recorrencia = row.recorrencia === 'avulsa' ? 'avulsa' : 'recorrente';
+
+        return {
+          id: row.id,
+          tipoAulaId: row.tipo_aula_id,
+          tipoAulaNome: row.tipo_aula_nome,
+          diasSemana: row.dias_semana ?? [],
+          hora: row.hora,
+          categorias,
+          recorrencia,
+          dataUnica: (row.data_unica as string | null | undefined) ?? null,
+          createdAt: asIso(row.created_at),
+        };
+      }
     ),
   };
 }
@@ -439,22 +464,32 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
     }
 
     for (const aula of database.aulasCalendario) {
+      const legacyCategoria =
+        aula.categorias.length === 3 ? 'all' : aula.categorias[0] ?? 'all';
       await client.query(
-        `INSERT INTO aulas_calendario (id, tipo_aula_id, tipo_aula_nome, dias_semana, hora, categoria, created_at)
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
+        `INSERT INTO aulas_calendario (
+          id, tipo_aula_id, tipo_aula_nome, dias_semana, hora, categoria, categorias, recorrencia, data_unica, created_at
+        )
+         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7::jsonb, $8, $9, $10)
          ON CONFLICT (id) DO UPDATE SET
            tipo_aula_id = EXCLUDED.tipo_aula_id,
            tipo_aula_nome = EXCLUDED.tipo_aula_nome,
            dias_semana = EXCLUDED.dias_semana,
            hora = EXCLUDED.hora,
-           categoria = EXCLUDED.categoria`,
+           categoria = EXCLUDED.categoria,
+           categorias = EXCLUDED.categorias,
+           recorrencia = EXCLUDED.recorrencia,
+           data_unica = EXCLUDED.data_unica`,
         [
           aula.id,
           aula.tipoAulaId,
           aula.tipoAulaNome,
           JSON.stringify(aula.diasSemana),
           aula.hora,
-          aula.categoria,
+          legacyCategoria,
+          JSON.stringify(aula.categorias),
+          aula.recorrencia,
+          aula.dataUnica ?? null,
           aula.createdAt,
         ]
       );
