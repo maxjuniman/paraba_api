@@ -2,3 +2,5 @@ node_modules
 dist
 .env
 npm-debug.log*
+data/db.json
+data/*.json

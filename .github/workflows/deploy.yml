@@ -46,6 +46,7 @@ jobs:
             git pull --ff-only origin main
             npm ci
             npm run build
+            npm run migrate
 
             if pm2 describe paraba-api > /dev/null; then
               pm2 restart paraba-api --update-env

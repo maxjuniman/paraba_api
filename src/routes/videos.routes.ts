@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
+import { env } from '../config/env.js';
 import { readDatabase, writeDatabase } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 import type { VideoUpdate } from '../types.js';
 
 export const videosRoutes = Router();
-const videosEnabled = process.env.ENABLE_VIDEOS === 'true';
+const videosEnabled = env.enableVideos;
 
 videosRoutes.use(authRequired, requireProfessor);
 

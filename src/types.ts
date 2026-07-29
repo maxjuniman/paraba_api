@@ -66,9 +66,29 @@ export type VideoUpdate = {
   createdAt: string;
 };
 
+export type TipoAula = {
+  id: string;
+  nome: string;
+  createdAt: string;
+};
+
+export type AulaCategoria = 'all' | 'kids' | 'juvenil' | 'adulto';
+
+export type AulaCalendario = {
+  id: string;
+  tipoAulaId: string;
+  tipoAulaNome: string;
+  diasSemana: number[];
+  hora: string;
+  categoria: AulaCategoria;
+  createdAt: string;
+};
+
 export type Database = {
   users: User[];
   alunos: Aluno[];
   videos: VideoUpdate[];
   presencas: Presenca[];
+  tiposAula: TipoAula[];
+  aulasCalendario: AulaCalendario[];
 };

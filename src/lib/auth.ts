@@ -1,14 +1,13 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
+import { env } from '../config/env.js';
 import type { PublicUser, User } from '../types.js';
 
-const defaultExpiresIn = '7d';
-
 export function jwtSecret(): string {
-  return process.env.JWT_SECRET || 'paraba-dev-secret';
+  return env.jwtSecret;
 }
 
 export function jwtExpiresIn(): SignOptions['expiresIn'] {
-  return (process.env.JWT_EXPIRES_IN || defaultExpiresIn) as SignOptions['expiresIn'];
+  return env.jwtExpiresIn as SignOptions['expiresIn'];
 }
 
 export function toPublicUser(user: User): PublicUser {

@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
+import { env } from '../config/env.js';
 import { signAccessToken, toPublicUser } from '../lib/auth.js';
 import { readDatabase, writeDatabase } from '../lib/db.js';
 import type { User } from '../types.js';
 
 export const authRoutes = Router();
 
-const studentRegistrationEnabled = process.env.ENABLE_STUDENT_REGISTRATION !== 'false';
+const studentRegistrationEnabled = env.enableStudentRegistration;
 
 const loginSchema = z.object({
   email: z.string().email(),

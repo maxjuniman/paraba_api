@@ -12,6 +12,42 @@ npm run dev
 
 A API sobe por padrao em `http://localhost:8000`.
 
+## Banco de dados
+
+A API usa **somente PostgreSQL**. Nao existe mais `db.json`.
+
+`DATABASE_URL` e obrigatorio:
+
+```env
+DATABASE_URL=postgres://usuario:senha@localhost:5432/paraba_api
+DATABASE_SSL=false
+```
+
+Na subida e no comando `npm run migrate`, a API cria/atualiza automaticamente as tabelas e colunas faltantes, incluindo `users.ativo`.
+
+Professores (`tipo = 1`) sao marcados como `ativo = true` na migration.
+
+Para rodar manualmente:
+
+```bash
+npm run migrate
+```
+
+Ou via SQL:
+
+```bash
+psql "$DATABASE_URL" -f migrations/001_full_schema.sql
+```
+
+Em producao (VPS):
+
+1. Configure `/opt/paraba-api/.env` com `DATABASE_URL`.
+2. Faca deploy do codigo novo.
+3. Remova o arquivo antigo, se ainda existir: `rm -f /opt/paraba-api/data/db.json`
+4. Reinicie: `pm2 restart paraba-api --update-env`
+
+Depois disso, cadastre novamente professor/alunos; eles vao aparecer nas tabelas `users` e `alunos`.
+
 No app Expo, use:
 
 ```env
@@ -51,7 +87,7 @@ Os limites ficam em `src/config/studentCategories.ts`:
 
 ## Professor manual
 
-Nesta etapa, o professor deve existir manualmente no `data/db.json` com `tipo: 1` e `ativo: true`.
+O professor deve existir na tabela `users` com `tipo = 1` e `ativo = true`.
 
 Para gerar um hash de senha:
 
@@ -59,21 +95,22 @@ Para gerar um hash de senha:
 node -e "import('bcryptjs').then(async bcrypt => console.log(await bcrypt.hash('sua-senha', 10)))"
 ```
 
-Exemplo de usuario professor:
+Exemplo de insert:
 
-```json
-{
-  "id": "professor-1",
-  "nome": "Professor",
-  "email": "professor@email.com",
-  "passwordHash": "HASH_GERADO",
-  "tipo": 1,
-  "ativo": true,
-  "alunoId": null,
-  "createdAt": "2026-07-28T00:00:00.000Z"
-}
+```sql
+INSERT INTO users (id, nome, email, password_hash, tipo, ativo, aluno_id, created_at)
+VALUES (
+  'professor-1',
+  'Professor',
+  'professor@email.com',
+  'HASH_GERADO',
+  1,
+  true,
+  NULL,
+  NOW()
+);
 ```
 
 ## Observacao
 
-Esta primeira etapa usa `data/db.json` como armazenamento local. Quando for evoluir o projeto, o proximo passo natural e trocar esse arquivo por um banco como PostgreSQL, MySQL ou SQLite.
+Sem `DATABASE_URL`, a API nao sobe. Users e alunos ficam nas tabelas `users` e `alunos`.
