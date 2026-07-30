@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
 import { toPublicUser } from '../lib/auth.js';
-import { insertAluno, readDatabase, updateAluno, updateUser } from '../lib/db.js';
+import { insertAluno, insertUser, readDatabase, updateAluno, updateUser } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 
@@ -45,6 +46,14 @@ const autorizarSchema = z
     message: 'Informe um aluno existente ou os dados para cadastrar um novo aluno.',
   });
 
+const professorSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe o nome do professor.'),
+  email: z.string().trim().email('Informe um e-mail valido.'),
+  celular: z.string().trim().optional().default(''),
+  senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
+  confirmacao_senha: z.string().min(6),
+});
+
 usersRoutes.get('/pendentes', async (_req, res, next) => {
   try {
     const database = await readDatabase();
@@ -54,6 +63,52 @@ usersRoutes.get('/pendentes', async (_req, res, next) => {
       .sort((a, b) => a.nome.localeCompare(b.nome));
 
     res.json({ data: users });
+  } catch (error) {
+    next(error);
+  }
+});
+
+usersRoutes.post('/professores', async (req, res, next) => {
+  try {
+    const parsed = professorSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const { nome, senha, confirmacao_senha } = parsed.data;
+    const email = parsed.data.email.toLowerCase();
+
+    if (senha !== confirmacao_senha) {
+      res.status(400).json({ message: 'A confirmacao de senha nao confere.' });
+      return;
+    }
+
+    const database = await readDatabase();
+
+    if (database.users.some((user) => user.email.toLowerCase() === email)) {
+      res.status(409).json({ message: 'Ja existe um usuario com este e-mail.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const user = await insertUser({
+      id: randomUUID(),
+      nome,
+      email,
+      celular: parsed.data.celular || undefined,
+      passwordHash: await bcrypt.hash(senha, 10),
+      tipo: 1,
+      ativo: true,
+      alunoId: null,
+      createdAt: now,
+    });
+
+    res.status(201).json({
+      message: 'Professor cadastrado com sucesso.',
+      data: toPublicUser(user),
+    });
   } catch (error) {
     next(error);
   }
