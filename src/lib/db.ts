@@ -67,6 +67,35 @@ function mapUser(row: Record<string, unknown>): User {
   };
 }
 
+function asPaymentDay(value: unknown): string | null {
+  if (value == null || value === '') return null;
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const day = Math.trunc(value);
+    return day >= 1 && day <= 31 ? String(day) : null;
+  }
+
+  const text = String(value).trim();
+  if (/^\d{1,2}$/.test(text)) {
+    const day = Number(text);
+    return day >= 1 && day <= 31 ? String(day) : null;
+  }
+
+  // Legado: data completa — extrai o dia.
+  const isoMatch = text.match(/^\d{4}-\d{2}-(\d{2})/);
+  if (isoMatch) {
+    const day = Number(isoMatch[1]);
+    return day >= 1 && day <= 31 ? String(day) : null;
+  }
+
+  const asNumber = Number(text);
+  if (Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= 31) {
+    return String(asNumber);
+  }
+
+  return null;
+}
+
 function mapAluno(row: Record<string, unknown>): Aluno {
   return {
     id: String(row.id),
@@ -76,7 +105,7 @@ function mapAluno(row: Record<string, unknown>): Aluno {
     emailResponsavel: (row.email_responsavel as string | null | undefined) ?? undefined,
     celular: (row.celular as string | null | undefined) ?? undefined,
     dataNascimento: asDateOnly(row.data_nascimento),
-    dataPagamento: (row.data_pagamento as string | null | undefined) ?? null,
+    dataPagamento: asPaymentDay(row.data_pagamento),
     pagamentoPago: (row.pagamento_pago as boolean | null | undefined) ?? null,
     pagamentoReferencia: (row.pagamento_referencia as string | null | undefined) ?? null,
     pagamentosPagos: (row.pagamentos_pagos as string[] | null | undefined) ?? [],

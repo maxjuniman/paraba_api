@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { insertAluno, readDatabase, updateAluno, updateUser } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
-import type { Aluno, PublicUser } from '../types.js';
+import type { Aluno } from '../types.js';
 
 export const alunosRoutes = Router();
 
@@ -49,7 +49,7 @@ const pagamentoStatusSchema = z.object({
   referencia: z.string().trim().regex(/^\d{4}-\d{2}$/, 'Informe a referencia no formato AAAA-MM.'),
 });
 
-function userPreview(user?: PublicUser | null) {
+function userPreview(user?: { id: string; nome: string; email: string; ativo?: boolean } | null) {
   if (!user) return null;
   return {
     id: user.id,
@@ -57,6 +57,15 @@ function userPreview(user?: PublicUser | null) {
     email: user.email,
     ativo: user.ativo ?? true,
   };
+}
+
+function findLinkedUser(database: Awaited<ReturnType<typeof readDatabase>>, aluno: Aluno) {
+  if (aluno.userId) {
+    const byId = database.users.find((item) => item.id === aluno.userId);
+    if (byId) return byId;
+  }
+
+  return database.users.find((item) => item.alunoId === aluno.id);
 }
 
 function attendanceSummary(database: Awaited<ReturnType<typeof readDatabase>>, alunoId: string) {
@@ -72,10 +81,11 @@ function attendanceSummary(database: Awaited<ReturnType<typeof readDatabase>>, a
 }
 
 function alunoWithDetails(database: Awaited<ReturnType<typeof readDatabase>>, aluno: Aluno): Aluno {
-  const user = database.users.find((item) => item.id === aluno.userId);
+  const user = findLinkedUser(database, aluno);
   return {
     ...aluno,
     user: userPreview(user),
+    cadastroAppAt: user?.createdAt ?? null,
     ...attendanceSummary(database, aluno.id),
   };
 }
@@ -220,8 +230,7 @@ alunosRoutes.patch('/:alunoId/pagamento', async (req, res, next) => {
       ...aluno,
       dataPagamento: parsed.data.data_pagamento,
     });
-    const user = database.users.find((item) => item.id === updatedAluno.userId);
-    res.json({ data: { ...updatedAluno, user: userPreview(user) } });
+    res.json({ data: alunoWithDetails(database, updatedAluno) });
   } catch (error) {
     next(error);
   }
@@ -261,8 +270,7 @@ alunosRoutes.patch('/:alunoId/pagamento-status', async (req, res, next) => {
       pagamentoPago: parsed.data.pago,
       pagamentoReferencia: parsed.data.referencia,
     });
-    const user = database.users.find((item) => item.id === updatedAluno.userId);
-    res.json({ data: { ...updatedAluno, user: userPreview(user) } });
+    res.json({ data: alunoWithDetails(database, updatedAluno) });
   } catch (error) {
     next(error);
   }

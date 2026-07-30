@@ -15,6 +15,7 @@ export function toPublicUser(user: User): PublicUser {
     id: user.id,
     nome: user.nome,
     email: user.email,
+    celular: user.celular ?? undefined,
     tipo: user.tipo,
     ativo: user.ativo ?? true,
     alunoId: user.alunoId ?? null,

@@ -4,7 +4,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { signAccessToken, toPublicUser } from '../lib/auth.js';
-import { insertUser, readDatabase } from '../lib/db.js';
+import { insertUser, readDatabase, updateUser } from '../lib/db.js';
+import { authRequired } from '../middleware/authRequired.js';
 import type { User } from '../types.js';
 
 export const authRoutes = Router();
@@ -23,6 +24,23 @@ const registerSchema = z.object({
   senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
   confirmacao_senha: z.string().min(6),
 });
+
+const updateMeSchema = z
+  .object({
+    nome: z.string().trim().min(1, 'Informe seu nome.'),
+    celular: z.string().trim().optional().default(''),
+    senhaAtual: z.string().optional(),
+    novaSenha: z.string().min(6, 'A nova senha deve ter pelo menos 6 caracteres.').optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.novaSenha && !body.senhaAtual) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Informe a senha atual para alterar a senha.',
+        path: ['senhaAtual'],
+      });
+    }
+  });
 
 function sessionPayload(user: User) {
   return {
@@ -101,4 +119,57 @@ authRoutes.post('/register', async (req, res) => {
     message: 'Cadastro enviado. Aguarde a autorizacao do professor para acessar o aplicativo.',
     user: toPublicUser(user),
   });
+});
+
+authRoutes.get('/me', authRequired, async (req, res) => {
+  const database = await readDatabase();
+  const user = database.users.find((item) => item.id === req.user?.id);
+
+  if (!user) {
+    res.status(404).json({ message: 'Usuario nao encontrado.' });
+    return;
+  }
+
+  res.json({ data: toPublicUser(user) });
+});
+
+authRoutes.patch('/me', authRequired, async (req, res, next) => {
+  try {
+    const parsed = updateMeSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const user = database.users.find((item) => item.id === req.user?.id);
+
+    if (!user) {
+      res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return;
+    }
+
+    let passwordHash = user.passwordHash;
+
+    if (parsed.data.novaSenha) {
+      const matches = await bcrypt.compare(parsed.data.senhaAtual ?? '', user.passwordHash);
+      if (!matches) {
+        res.status(400).json({ message: 'Senha atual incorreta.' });
+        return;
+      }
+      passwordHash = await bcrypt.hash(parsed.data.novaSenha, 10);
+    }
+
+    const updated = await updateUser({
+      ...user,
+      nome: parsed.data.nome,
+      celular: parsed.data.celular || undefined,
+      passwordHash,
+    });
+
+    res.json({ data: toPublicUser(updated) });
+  } catch (error) {
+    next(error);
+  }
 });

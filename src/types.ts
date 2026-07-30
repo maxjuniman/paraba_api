@@ -17,6 +17,7 @@ export type PublicUser = {
   id: string;
   nome: string;
   email: string;
+  celular?: string;
   tipo: UserType;
   ativo: boolean;
   alunoId?: string | null;
@@ -38,6 +39,8 @@ export type Aluno = {
   graus?: number | null;
   userId?: string | null;
   user?: Pick<PublicUser, 'id' | 'nome' | 'email' | 'ativo'> | null;
+  /** Data do cadastro do usuario no aplicativo (inicio da cobranca). */
+  cadastroAppAt?: string | null;
   presencas?: Presenca[];
   totalPresencas?: number;
   ultimaPresenca?: string | null;
