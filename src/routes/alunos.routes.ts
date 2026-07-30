@@ -304,3 +304,36 @@ alunosRoutes.patch('/:alunoId/desativar-user', async (req, res, next) => {
     next(error);
   }
 });
+
+alunosRoutes.post('/:alunoId/desvincular-user', async (req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+    if (!aluno) {
+      res.status(404).json({ message: 'Aluno nao encontrado.' });
+      return;
+    }
+
+    if (!aluno.userId) {
+      res.status(400).json({ message: 'Aluno nao possui usuario vinculado.' });
+      return;
+    }
+
+    const user = database.users.find((item) => item.id === aluno.userId);
+
+    if (!user) {
+      const updatedAluno = await updateAluno({ ...aluno, userId: null, user: null });
+      res.json({ data: alunoWithDetails(await readDatabase(), updatedAluno) });
+      return;
+    }
+
+    await updateUser({ ...user, ativo: false, alunoId: null });
+    const updatedAluno = await updateAluno({ ...aluno, userId: null, user: null });
+    const refreshed = await readDatabase();
+
+    res.json({ data: alunoWithDetails(refreshed, updatedAluno) });
+  } catch (error) {
+    next(error);
+  }
+});
