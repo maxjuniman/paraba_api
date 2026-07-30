@@ -180,13 +180,14 @@ equipeRoutes.get('/', async (req, res) => {
 
 equipeRoutes.get('/me', async (req, res, next) => {
   try {
-    if (!isAlunoUser(req.user?.tipo)) {
+    const currentUser = req.user;
+    if (!currentUser || !isAlunoUser(currentUser.tipo)) {
       res.status(403).json({ message: 'Apenas usuarios alunos podem consultar o proprio cadastro.' });
       return;
     }
 
     const database = await readDatabase();
-    let aluno = findLinkedAluno(database.alunos, req.user.id, req.user.alunoId);
+    let aluno = findLinkedAluno(database.alunos, currentUser.id, currentUser.alunoId);
 
     if (!aluno) {
       res.status(404).json({ message: 'Nenhum aluno vinculado ao seu usuario.' });
@@ -194,14 +195,14 @@ equipeRoutes.get('/me', async (req, res, next) => {
     }
 
     // Garante o vinculo user_id no cadastro do aluno (fonte da verdade do pagamento).
-    if (aluno.userId !== req.user.id) {
+    if (aluno.userId !== currentUser.id) {
       aluno = await updateAluno({
         ...aluno,
-        userId: req.user.id,
+        userId: currentUser.id,
       });
     }
 
-    const linkedUser = findLinkedUser(database.users, aluno, req.user.id);
+    const linkedUser = findLinkedUser(database.users, aluno, currentUser.id);
 
     res.json({
       data: toMeuAluno(aluno, linkedUser?.createdAt ?? null),
@@ -212,7 +213,8 @@ equipeRoutes.get('/me', async (req, res, next) => {
 });
 equipeRoutes.patch('/me/foto', async (req, res, next) => {
   try {
-    if (!isAlunoUser(req.user?.tipo)) {
+    const currentUser = req.user;
+    if (!currentUser || !isAlunoUser(currentUser.tipo)) {
       res.status(403).json({ message: 'Apenas usuarios alunos podem editar a propria foto.' });
       return;
     }
@@ -224,7 +226,7 @@ equipeRoutes.patch('/me/foto', async (req, res, next) => {
     }
 
     const database = await readDatabase();
-    const aluno = findLinkedAluno(database.alunos, req.user.id, req.user.alunoId);
+    const aluno = findLinkedAluno(database.alunos, currentUser.id, currentUser.alunoId);
 
     if (!aluno) {
       res.status(404).json({ message: 'Nenhum aluno vinculado ao seu usuario.' });
@@ -234,12 +236,12 @@ equipeRoutes.patch('/me/foto', async (req, res, next) => {
     const updated = await updateAluno({
       ...aluno,
       foto: parsed.data.foto,
-      userId: req.user.id,
+      userId: currentUser.id,
     });
 
-    const linkedUser = findLinkedUser(database.users, updated, req.user.id);
+    const linkedUser = findLinkedUser(database.users, updated, currentUser.id);
     res.json({
-      data: toEquipeAluno(updated, req.user.id, req.user.alunoId ?? updated.id, linkedUser?.createdAt ?? null),
+      data: toEquipeAluno(updated, currentUser.id, currentUser.alunoId ?? updated.id, linkedUser?.createdAt ?? null),
     });
   } catch (error) {
     next(error);
