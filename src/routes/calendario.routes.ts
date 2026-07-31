@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { studentCategories } from '../config/studentCategories.js';
 import { readDatabase, writeDatabase, listActivePushTokens } from '../lib/db.js';
 import { notifyAulaAvulsaCriada } from '../lib/pushNotifications.js';
 import { authRequired } from '../middleware/authRequired.js';
-import type { Aluno, AulaCalendario, AulaCategoria, AulaRecorrencia, TipoAula } from '../types.js';
+import type { AulaCalendario, AulaCategoria, AulaRecorrencia, TipoAula } from '../types.js';
 
 export const calendarioRoutes = Router();
 
@@ -67,71 +66,11 @@ const aulaSchema = z
   });
 
 function isProfessor(tipo?: number | string): boolean {
-  return tipo === 1 || tipo === 'admin' || tipo === 'professor';
+  return tipo === 1 || tipo === '1' || tipo === 'admin' || tipo === 'professor';
 }
 
 function isAluno(tipo?: number | string): boolean {
-  return tipo === 2 || tipo === 'aluno';
-}
-
-function calculateAge(isoDate?: string | null, referenceDate = new Date()): number | null {
-  if (!isoDate) return null;
-  const dateOnly = isoDate.trim().slice(0, 10);
-  const [year, month, day] = dateOnly.split('-').map(Number);
-  if (!year || !month || !day) return null;
-
-  let age = referenceDate.getFullYear() - year;
-  const currentMonth = referenceDate.getMonth() + 1;
-  const currentDay = referenceDate.getDate();
-  if (currentMonth < month || (currentMonth === month && currentDay < day)) {
-    age -= 1;
-  }
-
-  return age >= 0 ? age : null;
-}
-
-function studentCategoryId(isoDate?: string | null): AulaCategoria | null {
-  const age = calculateAge(isoDate);
-  if (age == null) return null;
-
-  const category = studentCategories.find((item) => {
-    const afterMin = age >= item.minAge;
-    const beforeMax = !('maxAge' in item) || item.maxAge == null || age <= item.maxAge;
-    return afterMin && beforeMax;
-  });
-
-  return category?.id ?? null;
-}
-
-function findLinkedAluno(
-  alunos: Aluno[],
-  userId?: string,
-  alunoId?: string | null
-): Aluno | undefined {
-  if (!userId) return undefined;
-  if (alunoId) {
-    const byId = alunos.find((aluno) => aluno.id === alunoId);
-    if (byId) return byId;
-  }
-  return alunos.find((aluno) => aluno.userId === userId);
-}
-
-function aulaMatchesStudentCategory(
-  categorias: AulaCategoria[],
-  studentCategory: AulaCategoria | null
-): boolean {
-  if (!studentCategory) return false;
-  if (categorias.length === 0) return true;
-  return categorias.includes(studentCategory);
-}
-
-function isUpcomingClass(data: string, hora: string, now = new Date()): boolean {
-  const [year, month, day] = data.split('-').map(Number);
-  const [hours = 0, minutes = 0] = hora.split(':').map(Number);
-  if (!year || !month || !day) return false;
-
-  const classDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
-  return classDate.getTime() > now.getTime();
+  return tipo === 2 || tipo === '2' || tipo === 'aluno';
 }
 
 function weekdayFromIsoDate(isoDate: string): number {
@@ -269,22 +208,14 @@ calendarioRoutes.get('/', async (req, res) => {
 
   const database = await readDatabase();
   const range = monthRange(parsedMonth.data);
+  const alunoViewer = isAluno(req.user?.tipo);
 
-  let aulasCalendario = database.aulasCalendario;
-
-  if (isAluno(req.user?.tipo)) {
-    const aluno = findLinkedAluno(database.alunos, req.user?.id, req.user?.alunoId);
-    const studentCategory = studentCategoryId(aluno?.dataNascimento);
-    aulasCalendario = aulasCalendario.filter((aula) =>
-      aulaMatchesStudentCategory(aula.categorias, studentCategory)
-    );
-  }
-
-  const aulas = aulasCalendario
+  // Aluno ve o mesmo calendario do mes; so omite dados de presenca.
+  // Proximas/Passadas e filtrado no app.
+  const aulas = database.aulasCalendario
     .flatMap((aula) => expandMonth(aula, range.month, database))
-    .filter((aula) => !isAluno(req.user?.tipo) || isUpcomingClass(aula.data, aula.hora))
     .map((aula) => {
-      if (!isAluno(req.user?.tipo)) return aula;
+      if (!alunoViewer) return aula;
       return {
         id: aula.id,
         aulaId: aula.aulaId,
