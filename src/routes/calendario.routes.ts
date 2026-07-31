@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
+import { studentCategories } from '../config/studentCategories.js';
 import { readDatabase, writeDatabase, listActivePushTokens } from '../lib/db.js';
 import { notifyAulaAvulsaCriada } from '../lib/pushNotifications.js';
 import { authRequired } from '../middleware/authRequired.js';
-import type { AulaCalendario, AulaCategoria, AulaRecorrencia, TipoAula } from '../types.js';
+import type { Aluno, AulaCalendario, AulaCategoria, AulaRecorrencia, TipoAula } from '../types.js';
 
 export const calendarioRoutes = Router();
 
@@ -71,6 +72,57 @@ function isProfessor(tipo?: number | string): boolean {
 
 function isAluno(tipo?: number | string): boolean {
   return tipo === 2 || tipo === '2' || tipo === 'aluno';
+}
+
+function calculateAge(isoDate?: string | null, referenceDate = new Date()): number | null {
+  if (!isoDate) return null;
+  const dateOnly = isoDate.trim().slice(0, 10);
+  const [year, month, day] = dateOnly.split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  let age = referenceDate.getFullYear() - year;
+  const currentMonth = referenceDate.getMonth() + 1;
+  const currentDay = referenceDate.getDate();
+  if (currentMonth < month || (currentMonth === month && currentDay < day)) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function studentCategoryId(isoDate?: string | null): AulaCategoria | null {
+  const age = calculateAge(isoDate);
+  if (age == null) return null;
+
+  const category = studentCategories.find((item) => {
+    const afterMin = age >= item.minAge;
+    const beforeMax = !('maxAge' in item) || item.maxAge == null || age <= item.maxAge;
+    return afterMin && beforeMax;
+  });
+
+  return (category?.id as AulaCategoria | undefined) ?? null;
+}
+
+function findLinkedAluno(
+  alunos: Aluno[],
+  userId?: string,
+  alunoId?: string | null
+): Aluno | undefined {
+  if (!userId) return undefined;
+  if (alunoId) {
+    const byId = alunos.find((aluno) => aluno.id === alunoId);
+    if (byId) return byId;
+  }
+  return alunos.find((aluno) => aluno.userId === userId);
+}
+
+function aulaMatchesStudentCategory(
+  categorias: AulaCategoria[],
+  studentCategory: AulaCategoria | null
+): boolean {
+  if (!studentCategory) return false;
+  if (!categorias?.length) return true;
+  return categorias.includes(studentCategory);
 }
 
 function weekdayFromIsoDate(isoDate: string): number {
@@ -210,9 +262,23 @@ calendarioRoutes.get('/', async (req, res) => {
   const range = monthRange(parsedMonth.data);
   const alunoViewer = isAluno(req.user?.tipo);
 
-  // Aluno ve o mesmo calendario do mes; so omite dados de presenca.
-  // Proximas/Passadas e filtrado no app.
-  const aulas = database.aulasCalendario
+  let aulasCalendario = database.aulasCalendario;
+
+  if (alunoViewer) {
+    const aluno = findLinkedAluno(database.alunos, req.user?.id, req.user?.alunoId);
+    if (!aluno) {
+      res.json({ data: { mes: range.month, aulas: [] } });
+      return;
+    }
+
+    const studentCategory = studentCategoryId(aluno.dataNascimento);
+    aulasCalendario = aulasCalendario.filter((aula) =>
+      aulaMatchesStudentCategory(aula.categorias, studentCategory)
+    );
+  }
+
+  // Proximas/Passadas fica no app. Aluno nao recebe lista de presentes.
+  const aulas = aulasCalendario
     .flatMap((aula) => expandMonth(aula, range.month, database))
     .map((aula) => {
       if (!alunoViewer) return aula;
