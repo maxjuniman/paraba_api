@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { toPublicUser } from '../lib/auth.js';
 import { insertAluno, insertUser, readDatabase, updateAluno, updateUser } from '../lib/db.js';
+import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 
@@ -30,7 +31,11 @@ const alunoSchema = z.object({
   apelido: z.string().trim().optional(),
   foto: z.string().trim().optional(),
   emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
-  celular: z.string().trim().optional(),
+  celular: z
+    .string()
+    .trim()
+    .min(1, 'Informe o celular do aluno.')
+    .refine((value) => isValidBrazilMobile(value), 'Informe um celular valido com DDD.'),
   dataNascimento: birthDateSchema,
   dataPagamento: paymentDaySchema.optional(),
   faixaAtual: z.string().trim().optional(),
@@ -146,6 +151,16 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
     }
 
     if (!aluno && parsed.data.aluno) {
+      const duplicate = database.alunos.find((item) =>
+        phonesMatch(item.celular, parsed.data.aluno?.celular)
+      );
+      if (duplicate) {
+        res.status(409).json({
+          message: `Ja existe um aluno com este celular (${duplicate.nome}).`,
+        });
+        return;
+      }
+
       const now = new Date().toISOString();
       aluno = await insertAluno({
         id: randomUUID(),
@@ -153,7 +168,7 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
         apelido: parsed.data.aluno.apelido || null,
         foto: parsed.data.aluno.foto || null,
         emailResponsavel: parsed.data.aluno.emailResponsavel || undefined,
-        celular: parsed.data.aluno.celular || undefined,
+        celular: parsed.data.aluno.celular,
         dataNascimento: parsed.data.aluno.dataNascimento,
         dataPagamento: parsed.data.aluno.dataPagamento || null,
         pagamentoPago: false,
@@ -161,6 +176,7 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
         pagamentosPagos: [],
         faixaAtual: parsed.data.aluno.faixaAtual || null,
         graus: parsed.data.aluno.graus ?? 0,
+        ativo: true,
         userId: null,
         user: null,
         createdAt: now,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { insertAluno, readDatabase, updateAluno, updateUser } from '../lib/db.js';
+import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 import type { Aluno } from '../types.js';
@@ -29,7 +30,11 @@ const alunoSchema = z.object({
   apelido: z.string().trim().optional(),
   foto: z.string().trim().optional(),
   emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
-  celular: z.string().trim().optional(),
+  celular: z
+    .string()
+    .trim()
+    .min(1, 'Informe o celular do aluno.')
+    .refine((value) => isValidBrazilMobile(value), 'Informe um celular valido com DDD.'),
   dataNascimento: birthDateSchema,
   dataPagamento: paymentDaySchema.optional(),
   faixaAtual: z.string().trim().optional(),
@@ -94,6 +99,16 @@ function alunoWithDetails(database: Awaited<ReturnType<typeof readDatabase>>, al
   };
 }
 
+function findAlunoByCelular(
+  alunos: Aluno[],
+  celular: string,
+  excludeAlunoId?: string
+): Aluno | undefined {
+  return alunos.find(
+    (item) => item.id !== excludeAlunoId && phonesMatch(item.celular, celular)
+  );
+}
+
 async function alunosWithUsers(): Promise<Aluno[]> {
   const database = await readDatabase();
   return database.alunos
@@ -118,6 +133,15 @@ alunosRoutes.post('/', async (req, res, next) => {
       return;
     }
 
+    const database = await readDatabase();
+    const duplicate = findAlunoByCelular(database.alunos, parsed.data.celular);
+    if (duplicate) {
+      res.status(409).json({
+        message: `Ja existe um aluno com este celular (${duplicate.nome}).`,
+      });
+      return;
+    }
+
     const now = new Date().toISOString();
     const aluno = await insertAluno({
       id: randomUUID(),
@@ -125,7 +149,7 @@ alunosRoutes.post('/', async (req, res, next) => {
       apelido: parsed.data.apelido || null,
       foto: parsed.data.foto || null,
       emailResponsavel: parsed.data.emailResponsavel || undefined,
-      celular: parsed.data.celular || undefined,
+      celular: parsed.data.celular,
       dataNascimento: parsed.data.dataNascimento,
       dataPagamento: parsed.data.dataPagamento || null,
       pagamentoPago: false,
@@ -162,13 +186,21 @@ alunosRoutes.patch('/:alunoId', async (req, res, next) => {
       return;
     }
 
+    const duplicate = findAlunoByCelular(database.alunos, parsed.data.celular, existing.id);
+    if (duplicate) {
+      res.status(409).json({
+        message: `Ja existe um aluno com este celular (${duplicate.nome}).`,
+      });
+      return;
+    }
+
     const aluno = await updateAluno({
       ...existing,
       nome: parsed.data.nome,
       apelido: parsed.data.apelido || null,
       foto: parsed.data.foto || null,
       emailResponsavel: parsed.data.emailResponsavel || undefined,
-      celular: parsed.data.celular || undefined,
+      celular: parsed.data.celular,
       dataNascimento: parsed.data.dataNascimento,
       dataPagamento: parsed.data.dataPagamento || null,
       faixaAtual: parsed.data.faixaAtual || null,
