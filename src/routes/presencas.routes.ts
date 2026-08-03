@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { studentCategories } from '../config/studentCategories.js';
 import { readDatabase, writeDatabase } from '../lib/db.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
@@ -28,35 +27,6 @@ function userPreview(user?: PublicUser | null) {
     email: user.email,
     ativo: user.ativo ?? true,
   };
-}
-
-function calculateAge(isoDate?: string | null, referenceDate = new Date()): number | null {
-  if (!isoDate) return null;
-  const dateOnly = isoDate.trim().slice(0, 10);
-  const [year, month, day] = dateOnly.split('-').map(Number);
-  if (!year || !month || !day) return null;
-
-  let age = referenceDate.getFullYear() - year;
-  const currentMonth = referenceDate.getMonth() + 1;
-  const currentDay = referenceDate.getDate();
-  if (currentMonth < month || (currentMonth === month && currentDay < day)) {
-    age -= 1;
-  }
-
-  return age >= 0 ? age : null;
-}
-
-function studentCategoryId(isoDate?: string | null): AulaCategoria | null {
-  const age = calculateAge(isoDate);
-  if (age == null) return null;
-
-  const category = studentCategories.find((item) => {
-    const afterMin = age >= item.minAge;
-    const beforeMax = !('maxAge' in item) || item.maxAge == null || age <= item.maxAge;
-    return afterMin && beforeMax;
-  });
-
-  return category?.id ?? null;
 }
 
 function attendanceSummary(database: Awaited<ReturnType<typeof readDatabase>>, alunoId: string) {
@@ -109,13 +79,6 @@ function aulasDoDia(aulasCalendario: AulaCalendario[], isoDate: string): Presenc
     .sort((a, b) => a.hora.localeCompare(b.hora) || a.tipoAula.nome.localeCompare(b.tipoAula.nome));
 }
 
-function alunoMatchesCategorias(aluno: Aluno, categorias?: AulaCategoria[] | null): boolean {
-  if (!categorias?.length) return true;
-  const studentCategory = studentCategoryId(aluno.dataNascimento);
-  if (!studentCategory) return false;
-  return categorias.includes(studentCategory);
-}
-
 function findPresenca(
   database: Awaited<ReturnType<typeof readDatabase>>,
   alunoId: string,
@@ -141,19 +104,27 @@ presencasRoutes.get('/', async (req, res) => {
   const aulaSelecionada =
     aulas.find((aula) => aula.aulaId === requestedAulaId) ?? aulas[0] ?? null;
 
-  const alunos = aulaSelecionada
-    ? database.alunos
-        .filter((aluno) => alunoMatchesCategorias(aluno, aulaSelecionada.categorias))
-        .map((aluno): PresencaDiaAluno => {
-          const presenca = findPresenca(database, aluno.id, parsed.data, aulaSelecionada.aulaId);
-          return {
-            ...alunoWithAttendance(database, aluno),
-            presente: presenca?.presente ?? false,
-            presenca: presenca ?? null,
-          };
-        })
-        .sort((a, b) => a.nome.localeCompare(b.nome))
-    : [];
+  const alunos = database.alunos
+    .filter((aluno) => aluno.ativo !== false)
+    .map((aluno): PresencaDiaAluno => {
+      const presentePorAula: Record<string, boolean> = {};
+      for (const aula of aulas) {
+        const presenca = findPresenca(database, aluno.id, parsed.data, aula.aulaId);
+        presentePorAula[aula.aulaId] = presenca?.presente ?? false;
+      }
+
+      const selectedPresenca = aulaSelecionada
+        ? findPresenca(database, aluno.id, parsed.data, aulaSelecionada.aulaId)
+        : null;
+
+      return {
+        ...alunoWithAttendance(database, aluno),
+        presente: selectedPresenca?.presente ?? false,
+        presentePorAula,
+        presenca: selectedPresenca ?? null,
+      };
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome));
 
   res.json({
     data: {
@@ -190,6 +161,11 @@ presencasRoutes.patch('/:data/aulas/:aulaId/alunos/:alunoId/toggle', async (req,
 
   if (!aluno) {
     res.status(404).json({ message: 'Aluno nao encontrado.' });
+    return;
+  }
+
+  if (aluno.ativo === false) {
+    res.status(400).json({ message: 'Aluno desativado nao pode ter presenca marcada.' });
     return;
   }
 

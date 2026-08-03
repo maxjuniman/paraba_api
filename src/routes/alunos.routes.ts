@@ -49,6 +49,10 @@ const pagamentoStatusSchema = z.object({
   referencia: z.string().trim().regex(/^\d{4}-\d{2}$/, 'Informe a referencia no formato AAAA-MM.'),
 });
 
+const ativoSchema = z.object({
+  ativo: z.boolean(),
+});
+
 function userPreview(user?: { id: string; nome: string; email: string; ativo?: boolean } | null) {
   if (!user) return null;
   return {
@@ -129,6 +133,7 @@ alunosRoutes.post('/', async (req, res, next) => {
       pagamentosPagos: [],
       faixaAtual: parsed.data.faixaAtual || null,
       graus: parsed.data.graus ?? 0,
+      ativo: true,
       userId: null,
       user: null,
       createdAt: now,
@@ -276,6 +281,40 @@ alunosRoutes.patch('/:alunoId/pagamento-status', async (req, res, next) => {
   }
 });
 
+alunosRoutes.patch('/:alunoId/ativo', async (req, res, next) => {
+  try {
+    const parsed = ativoSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+    if (!aluno) {
+      res.status(404).json({ message: 'Aluno nao encontrado.' });
+      return;
+    }
+
+    const updatedAluno = await updateAluno({
+      ...aluno,
+      ativo: parsed.data.ativo,
+    });
+
+    const user = findLinkedUser(await readDatabase(), updatedAluno);
+    if (user) {
+      await updateUser({ ...user, ativo: parsed.data.ativo });
+    }
+
+    const refreshed = await readDatabase();
+    res.json({ data: alunoWithDetails(refreshed, updatedAluno) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 alunosRoutes.patch('/:alunoId/desativar-user', async (req, res, next) => {
   try {
     const database = await readDatabase();
@@ -286,20 +325,18 @@ alunosRoutes.patch('/:alunoId/desativar-user', async (req, res, next) => {
       return;
     }
 
-    if (!aluno.userId) {
-      res.status(400).json({ message: 'Aluno nao possui usuario vinculado.' });
-      return;
+    const updatedAluno = await updateAluno({
+      ...aluno,
+      ativo: false,
+    });
+
+    const user = findLinkedUser(await readDatabase(), updatedAluno);
+    if (user) {
+      await updateUser({ ...user, ativo: false });
     }
 
-    const user = database.users.find((item) => item.id === aluno.userId);
-
-    if (!user) {
-      res.status(404).json({ message: 'Usuario vinculado nao encontrado.' });
-      return;
-    }
-
-    const updatedUser = await updateUser({ ...user, ativo: false });
-    res.json({ data: { ...aluno, user: userPreview(updatedUser) } });
+    const refreshed = await readDatabase();
+    res.json({ data: alunoWithDetails(refreshed, updatedAluno) });
   } catch (error) {
     next(error);
   }

@@ -37,6 +37,7 @@ export type Aluno = {
   pagamentosPagos?: string[] | null;
   faixaAtual?: string | null;
   graus?: number | null;
+  ativo?: boolean;
   userId?: string | null;
   user?: Pick<PublicUser, 'id' | 'nome' | 'email' | 'ativo'> | null;
   /** Data do cadastro do usuario no aplicativo (inicio da cobranca). */
@@ -59,6 +60,7 @@ export type Presenca = {
 
 export type PresencaDiaAluno = Aluno & {
   presente: boolean;
+  presentePorAula?: Record<string, boolean>;
   presenca?: Presenca | null;
 };
 

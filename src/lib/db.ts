@@ -111,6 +111,7 @@ function mapAluno(row: Record<string, unknown>): Aluno {
     pagamentosPagos: (row.pagamentos_pagos as string[] | null | undefined) ?? [],
     faixaAtual: (row.faixa_atual as string | null | undefined) ?? null,
     graus: (row.graus as number | null | undefined) ?? 0,
+    ativo: asBoolean(row.ativo, true),
     userId: (row.user_id as string | null | undefined) ?? null,
     user: null,
     createdAt: asIso(row.created_at),
@@ -205,9 +206,9 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
   const { rows } = await pool.query(
     `INSERT INTO alunos (
       id, nome, apelido, foto, email_responsavel, celular, data_nascimento, data_pagamento,
-      pagamento_pago, pagamento_referencia, pagamentos_pagos, faixa_atual, graus, user_id, created_at
+      pagamento_pago, pagamento_referencia, pagamentos_pagos, faixa_atual, graus, ativo, user_id, created_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16)
     RETURNING *`,
     [
       aluno.id,
@@ -223,6 +224,7 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
       JSON.stringify(aluno.pagamentosPagos ?? []),
       aluno.faixaAtual ?? null,
       aluno.graus ?? 0,
+      asBoolean(aluno.ativo, true),
       aluno.userId ?? null,
       aluno.createdAt,
     ]
@@ -248,7 +250,8 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       pagamentos_pagos = $11::jsonb,
       faixa_atual = $12,
       graus = $13,
-      user_id = $14
+      ativo = $14,
+      user_id = $15
     WHERE id = $1
     RETURNING *`,
     [
@@ -265,6 +268,7 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       JSON.stringify(aluno.pagamentosPagos ?? []),
       aluno.faixaAtual ?? null,
       aluno.graus ?? 0,
+      asBoolean(aluno.ativo, true),
       aluno.userId ?? null,
     ]
   );

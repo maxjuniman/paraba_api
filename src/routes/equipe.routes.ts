@@ -169,6 +169,7 @@ equipeRoutes.get('/', async (req, res) => {
 
   const database = await readDatabase();
   const alunos = database.alunos
+    .filter((aluno) => aluno.ativo !== false)
     .map((aluno) => {
       const linkedUser = findLinkedUser(database.users, aluno, req.user?.id);
       return toEquipeAluno(aluno, req.user?.id, req.user?.alunoId, linkedUser?.createdAt ?? null);

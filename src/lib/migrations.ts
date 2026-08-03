@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS alunos (
   pagamentos_pagos JSONB DEFAULT '[]'::jsonb,
   faixa_atual TEXT,
   graus INTEGER DEFAULT 0,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
   user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -185,6 +186,8 @@ DELETE FROM tipos_aula WHERE id = 'aula-avulsa' OR lower(trim(nome)) = 'aula avu
 UPDATE users
 SET ativo = TRUE
 WHERE tipo = 1 AND ativo IS DISTINCT FROM TRUE;
+
+ALTER TABLE alunos ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
 CREATE INDEX IF NOT EXISTS alunos_user_id_idx ON alunos (user_id);
