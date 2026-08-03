@@ -22,10 +22,20 @@ function resolveCorsOrigin(): boolean | string | RegExp | (string | RegExp)[] | 
   const raw = env.corsOrigin.trim();
   if (!raw || raw === '*') return true;
 
-  const allowed = raw
+  const fromEnv = raw
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+
+  // Origins do site de divulgacao (sempre liberados junto com CORS_ORIGIN).
+  const defaults = [
+    'https://equipeparaba.com.br',
+    'https://www.equipeparaba.com.br',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ];
+
+  const allowed = [...new Set([...fromEnv, ...defaults])];
 
   if (allowed.length === 1) return allowed[0];
 
