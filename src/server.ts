@@ -14,9 +14,32 @@ import { videosRoutes } from './routes/videos.routes.js';
 
 const app = express();
 
+function resolveCorsOrigin(): boolean | string | RegExp | (string | RegExp)[] | ((
+  requestOrigin: string | undefined,
+  callback: (err: Error | null, origin?: boolean | string) => void
+) => void) {
+  const raw = env.corsOrigin.trim();
+  if (!raw || raw === '*') return true;
+
+  const allowed = raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (allowed.length === 1) return allowed[0];
+
+  return (requestOrigin, callback) => {
+    if (!requestOrigin || allowed.includes(requestOrigin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  };
+}
+
 app.use(
   cors({
-    origin: env.corsOrigin === '*' ? true : env.corsOrigin,
+    origin: resolveCorsOrigin(),
   })
 );
 app.use(express.json({ limit: '10mb' }));

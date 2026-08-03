@@ -6,6 +6,38 @@ import type { Aluno } from '../types.js';
 
 export const equipeRoutes = Router();
 
+/** Ordem do jiu-jitsu: faixa mais alta primeiro (preta -> branca). */
+const FAIXA_RANK: Record<string, number> = {
+  preta: 0,
+  marrom: 1,
+  roxa: 2,
+  azul: 3,
+  verde: 4,
+  laranja: 5,
+  amarela: 6,
+  cinza: 7,
+  branca: 8,
+};
+
+function faixaRank(faixa?: string | null): number {
+  if (!faixa) return 99;
+  const key = faixa.trim().toLowerCase();
+  return FAIXA_RANK[key] ?? 98;
+}
+
+function compareByFaixaThenGrausThenNome(
+  a: { nome: string; faixaAtual?: string | null; graus?: number | null },
+  b: { nome: string; faixaAtual?: string | null; graus?: number | null }
+): number {
+  const byFaixa = faixaRank(a.faixaAtual) - faixaRank(b.faixaAtual);
+  if (byFaixa !== 0) return byFaixa;
+
+  const byGraus = (b.graus ?? 0) - (a.graus ?? 0);
+  if (byGraus !== 0) return byGraus;
+
+  return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+}
+
 /** Lista publica da equipe (ativos) para o site de divulgacao. */
 equipeRoutes.get('/public', async (_req, res, next) => {
   try {
@@ -20,7 +52,7 @@ equipeRoutes.get('/public', async (_req, res, next) => {
         faixaAtual: normalizeFaixa(aluno),
         graus: normalizeGraus(aluno),
       }))
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+      .sort(compareByFaixaThenGrausThenNome);
 
     res.json({ data: alunos });
   } catch (error) {
@@ -196,7 +228,7 @@ equipeRoutes.get('/', async (req, res) => {
       const linkedUser = findLinkedUser(database.users, aluno, req.user?.id);
       return toEquipeAluno(aluno, req.user?.id, req.user?.alunoId, linkedUser?.createdAt ?? null);
     })
-    .sort((a, b) => a.nome.localeCompare(b.nome));
+    .sort(compareByFaixaThenGrausThenNome);
 
   res.json({ data: alunos });
 });
