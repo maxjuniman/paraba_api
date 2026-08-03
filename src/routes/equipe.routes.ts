@@ -6,6 +6,28 @@ import type { Aluno } from '../types.js';
 
 export const equipeRoutes = Router();
 
+/** Lista publica da equipe (ativos) para o site de divulgacao. */
+equipeRoutes.get('/public', async (_req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const alunos = database.alunos
+      .filter((aluno) => aluno.ativo !== false)
+      .map((aluno) => ({
+        id: aluno.id,
+        nome: aluno.nome,
+        apelido: aluno.apelido ?? null,
+        foto: aluno.foto ?? null,
+        faixaAtual: normalizeFaixa(aluno),
+        graus: normalizeGraus(aluno),
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+
+    res.json({ data: alunos });
+  } catch (error) {
+    next(error);
+  }
+});
+
 equipeRoutes.use(authRequired);
 
 type AlunoWithLegacyFields = {

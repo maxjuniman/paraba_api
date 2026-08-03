@@ -1,16 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { toPublicUser } from '../lib/auth.js';
+import { getBearerToken, jwtSecret, signAccessToken, toPublicUser } from '../lib/auth.js';
 import { insertAluno, insertUser, readDatabase, updateAluno, updateUser } from '../lib/db.js';
 import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 
 export const usersRoutes = Router();
-
-usersRoutes.use(authRequired, requireProfessor);
 
 const paymentDaySchema = z
   .string()
@@ -60,20 +59,7 @@ const professorSchema = z.object({
   confirmacao_senha: z.string().min(6),
 });
 
-usersRoutes.get('/pendentes', async (_req, res, next) => {
-  try {
-    const database = await readDatabase();
-    const users = database.users
-      .filter((user) => user.tipo === 2 && user.ativo === false)
-      .map(toPublicUser)
-      .sort((a, b) => a.nome.localeCompare(b.nome));
-
-    res.json({ data: users });
-  } catch (error) {
-    next(error);
-  }
-});
-
+/** Publico se ainda nao houver professor; depois exige professor autenticado. */
 usersRoutes.post('/professores', async (req, res, next) => {
   try {
     const parsed = professorSchema.safeParse(req.body);
@@ -92,6 +78,29 @@ usersRoutes.post('/professores', async (req, res, next) => {
     }
 
     const database = await readDatabase();
+    const hasProfessor = database.users.some((user) => user.tipo === 1);
+
+    if (hasProfessor) {
+      const token = getBearerToken(req.header('Authorization'));
+      if (!token) {
+        res.status(401).json({
+          message: 'Ja existem professores. Entre no admin e cadastre em Configuracoes.',
+        });
+        return;
+      }
+
+      try {
+        const payload = jwt.verify(token, jwtSecret()) as { sub?: string };
+        const requester = database.users.find((item) => item.id === payload.sub);
+        if (!requester || requester.tipo !== 1 || requester.ativo === false) {
+          res.status(403).json({ message: 'Acesso permitido apenas para professor.' });
+          return;
+        }
+      } catch {
+        res.status(401).json({ message: 'Token de acesso invalido ou expirado.' });
+        return;
+      }
+    }
 
     if (database.users.some((user) => user.email.toLowerCase() === email)) {
       res.status(409).json({ message: 'Ja existe um usuario com este e-mail.' });
@@ -114,7 +123,25 @@ usersRoutes.post('/professores', async (req, res, next) => {
     res.status(201).json({
       message: 'Professor cadastrado com sucesso.',
       data: toPublicUser(user),
+      accessToken: signAccessToken(user),
+      user: toPublicUser(user),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+usersRoutes.use(authRequired, requireProfessor);
+
+usersRoutes.get('/pendentes', async (_req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const users = database.users
+      .filter((user) => user.tipo === 2 && user.ativo === false)
+      .map(toPublicUser)
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+
+    res.json({ data: users });
   } catch (error) {
     next(error);
   }
