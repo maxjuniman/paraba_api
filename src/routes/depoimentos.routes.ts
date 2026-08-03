@@ -56,17 +56,17 @@ function fullDepoimento(item: Depoimento) {
   return {
     ...publicDepoimento(item),
     userId: item.userId ?? null,
-    ativo: item.ativo !== false,
+    ativo: item.ativo === true,
     createdAt: item.createdAt,
   };
 }
 
-/** Lista publica de depoimentos ativos (site de divulgacao). */
+/** Lista publica de depoimentos aprovados (ativo) para o site de divulgacao. */
 depoimentosRoutes.get('/public', async (_req, res, next) => {
   try {
     const database = await readDatabase();
     const depoimentos = database.depoimentos
-      .filter((item) => item.ativo !== false)
+      .filter((item) => item.ativo === true)
       .map(publicDepoimento)
       .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'));
 
@@ -128,12 +128,14 @@ depoimentosRoutes.put('/me', async (req, res, next) => {
 
     const existing = database.depoimentos.find((item) => item.userId === user.id);
     const now = new Date().toISOString();
+    // Tipo 1 publica direto; tipo 2 fica pendente ate aprovacao do professor.
+    const aprovado = isProfessor(user.tipo);
 
     if (existing) {
       existing.nome = nome;
       existing.texto = parsed.data.texto;
       existing.faixa = faixa;
-      existing.ativo = true;
+      existing.ativo = aprovado;
     } else {
       const created: Depoimento = {
         id: randomUUID(),
@@ -141,7 +143,7 @@ depoimentosRoutes.put('/me', async (req, res, next) => {
         texto: parsed.data.texto,
         faixa,
         userId: user.id,
-        ativo: true,
+        ativo: aprovado,
         ordem: database.depoimentos.length,
         createdAt: now,
       };
@@ -150,7 +152,12 @@ depoimentosRoutes.put('/me', async (req, res, next) => {
 
     await writeDatabase(database);
     const saved = database.depoimentos.find((item) => item.userId === user.id)!;
-    res.json({ data: fullDepoimento(saved) });
+    res.json({
+      data: fullDepoimento(saved),
+      message: aprovado
+        ? 'Depoimento publicado no site.'
+        : 'Depoimento enviado. Aguarde a aprovacao do professor para aparecer no site.',
+    });
   } catch (error) {
     next(error);
   }
@@ -161,7 +168,11 @@ depoimentosRoutes.get('/', requireProfessor, async (_req, res, next) => {
     const database = await readDatabase();
     const depoimentos = [...database.depoimentos]
       .map(fullDepoimento)
-      .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'));
+      .sort((a, b) => {
+        // Pendentes primeiro para facilitar aprovacao.
+        if (a.ativo !== b.ativo) return a.ativo ? 1 : -1;
+        return a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR');
+      });
     res.json({ data: depoimentos });
   } catch (error) {
     next(error);
@@ -227,15 +238,15 @@ depoimentosRoutes.patch('/:id', requireProfessor, async (req, res, next) => {
 depoimentosRoutes.delete('/:id', requireProfessor, async (req, res, next) => {
   try {
     const database = await readDatabase();
-    const item = database.depoimentos.find((depoimento) => depoimento.id === req.params.id);
-    if (!item) {
+    const index = database.depoimentos.findIndex((depoimento) => depoimento.id === req.params.id);
+    if (index < 0) {
       res.status(404).json({ message: 'Depoimento nao encontrado.' });
       return;
     }
 
-    item.ativo = false;
+    const [removed] = database.depoimentos.splice(index, 1);
     await writeDatabase(database);
-    res.json({ data: fullDepoimento(item) });
+    res.json({ data: fullDepoimento(removed) });
   } catch (error) {
     next(error);
   }
