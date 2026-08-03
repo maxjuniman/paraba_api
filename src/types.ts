@@ -113,10 +113,22 @@ export type AulaCalendario = {
   createdAt: string;
 };
 
+export type Depoimento = {
+  id: string;
+  nome: string;
+  texto: string;
+  faixa?: string | null;
+  userId?: string | null;
+  ativo: boolean;
+  ordem: number;
+  createdAt: string;
+};
+
 export type Database = {
   users: User[];
   alunos: Aluno[];
   videos: VideoUpdate[];
+  depoimentos: Depoimento[];
   presencas: Presenca[];
   tiposAula: TipoAula[];
   aulasCalendario: AulaCalendario[];

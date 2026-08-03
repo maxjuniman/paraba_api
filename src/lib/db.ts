@@ -1,6 +1,15 @@
 import { createPgPool } from './pgPool.js';
 import { runMigrations } from './migrations.js';
-import type { Aluno, AulaCalendario, Database, Presenca, TipoAula, User, VideoUpdate } from '../types.js';
+import type {
+  Aluno,
+  AulaCalendario,
+  Database,
+  Depoimento,
+  Presenca,
+  TipoAula,
+  User,
+  VideoUpdate,
+} from '../types.js';
 
 const pool = createPgPool();
 let postgresReady: Promise<void> | null = null;
@@ -122,10 +131,11 @@ function mapAluno(row: Record<string, unknown>): Aluno {
 async function readPostgresDatabase(): Promise<Database> {
   await ensurePostgres();
 
-  const [users, alunos, videos, presencas, tiposAula, aulasCalendario] = await Promise.all([
+  const [users, alunos, videos, depoimentos, presencas, tiposAula, aulasCalendario] = await Promise.all([
     pool.query('SELECT * FROM users ORDER BY created_at ASC'),
     pool.query('SELECT * FROM alunos ORDER BY created_at ASC'),
     pool.query('SELECT * FROM videos ORDER BY created_at ASC'),
+    pool.query('SELECT * FROM depoimentos ORDER BY ordem ASC, created_at ASC'),
     pool.query('SELECT * FROM presencas ORDER BY data ASC, marked_at ASC'),
     pool.query('SELECT * FROM tipos_aula ORDER BY nome ASC'),
     pool.query('SELECT * FROM aulas_calendario ORDER BY created_at ASC'),
@@ -141,6 +151,18 @@ async function readPostgresDatabase(): Promise<Database> {
         descricao: row.descricao ?? undefined,
         url: row.url,
         alunoId: row.aluno_id,
+        createdAt: asIso(row.created_at),
+      })
+    ),
+    depoimentos: depoimentos.rows.map(
+      (row): Depoimento => ({
+        id: row.id,
+        nome: row.nome,
+        texto: row.texto,
+        faixa: row.faixa ?? null,
+        userId: row.user_id ?? null,
+        ativo: row.ativo !== false,
+        ordem: Number(row.ordem ?? 0) || 0,
         createdAt: asIso(row.created_at),
       })
     ),
@@ -467,6 +489,30 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
            url = EXCLUDED.url,
            aluno_id = EXCLUDED.aluno_id`,
         [video.id, video.titulo, video.descricao ?? null, video.url, video.alunoId ?? null, video.createdAt]
+      );
+    }
+
+    for (const depoimento of database.depoimentos) {
+      await client.query(
+        `INSERT INTO depoimentos (id, nome, texto, faixa, user_id, ativo, ordem, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET
+           nome = EXCLUDED.nome,
+           texto = EXCLUDED.texto,
+           faixa = EXCLUDED.faixa,
+           user_id = EXCLUDED.user_id,
+           ativo = EXCLUDED.ativo,
+           ordem = EXCLUDED.ordem`,
+        [
+          depoimento.id,
+          depoimento.nome,
+          depoimento.texto,
+          depoimento.faixa ?? null,
+          depoimento.userId ?? null,
+          depoimento.ativo !== false,
+          depoimento.ordem ?? 0,
+          depoimento.createdAt,
+        ]
       );
     }
 
