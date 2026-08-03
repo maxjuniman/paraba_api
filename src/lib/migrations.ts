@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS alunos (
   apelido TEXT,
   foto TEXT,
   email_responsavel TEXT,
+  nome_responsavel TEXT,
   celular TEXT,
   data_nascimento TEXT,
   data_pagamento TEXT,
@@ -81,6 +82,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS apelido TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS foto TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS email_responsavel TEXT;
+ALTER TABLE alunos ADD COLUMN IF NOT EXISTS nome_responsavel TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS celular TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS data_nascimento TEXT;
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS data_pagamento TEXT;

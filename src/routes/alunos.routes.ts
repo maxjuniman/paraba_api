@@ -30,6 +30,7 @@ const alunoSchema = z.object({
   apelido: z.string().trim().optional(),
   foto: z.string().trim().optional(),
   emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
+  nomeResponsavel: z.string().trim().optional(),
   celular: z
     .string()
     .trim()
@@ -149,6 +150,7 @@ alunosRoutes.post('/', async (req, res, next) => {
       apelido: parsed.data.apelido || null,
       foto: parsed.data.foto || null,
       emailResponsavel: parsed.data.emailResponsavel || undefined,
+      nomeResponsavel: parsed.data.nomeResponsavel || null,
       celular: parsed.data.celular,
       dataNascimento: parsed.data.dataNascimento,
       dataPagamento: parsed.data.dataPagamento || null,
@@ -200,6 +202,7 @@ alunosRoutes.patch('/:alunoId', async (req, res, next) => {
       apelido: parsed.data.apelido || null,
       foto: parsed.data.foto || null,
       emailResponsavel: parsed.data.emailResponsavel || undefined,
+      nomeResponsavel: parsed.data.nomeResponsavel || null,
       celular: parsed.data.celular,
       dataNascimento: parsed.data.dataNascimento,
       dataPagamento: parsed.data.dataPagamento || null,

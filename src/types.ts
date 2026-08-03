@@ -29,6 +29,7 @@ export type Aluno = {
   apelido?: string | null;
   foto?: string | null;
   emailResponsavel?: string;
+  nomeResponsavel?: string | null;
   celular?: string;
   dataNascimento?: string;
   dataPagamento?: string | null;

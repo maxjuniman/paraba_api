@@ -103,6 +103,7 @@ function mapAluno(row: Record<string, unknown>): Aluno {
     apelido: (row.apelido as string | null | undefined) ?? null,
     foto: (row.foto as string | null | undefined) ?? null,
     emailResponsavel: (row.email_responsavel as string | null | undefined) ?? undefined,
+    nomeResponsavel: (row.nome_responsavel as string | null | undefined) ?? null,
     celular: (row.celular as string | null | undefined) ?? undefined,
     dataNascimento: asDateOnly(row.data_nascimento),
     dataPagamento: asPaymentDay(row.data_pagamento),
@@ -205,10 +206,10 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
 
   const { rows } = await pool.query(
     `INSERT INTO alunos (
-      id, nome, apelido, foto, email_responsavel, celular, data_nascimento, data_pagamento,
+      id, nome, apelido, foto, email_responsavel, nome_responsavel, celular, data_nascimento, data_pagamento,
       pagamento_pago, pagamento_referencia, pagamentos_pagos, faixa_atual, graus, ativo, user_id, created_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15, $16, $17)
     RETURNING *`,
     [
       aluno.id,
@@ -216,6 +217,7 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
       aluno.apelido ?? null,
       aluno.foto ?? null,
       aluno.emailResponsavel ?? null,
+      aluno.nomeResponsavel ?? null,
       aluno.celular ?? null,
       asDateOnly(aluno.dataNascimento) ?? null,
       aluno.dataPagamento == null ? null : String(aluno.dataPagamento),
@@ -242,16 +244,17 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       apelido = $3,
       foto = $4,
       email_responsavel = $5,
-      celular = $6,
-      data_nascimento = $7,
-      data_pagamento = $8,
-      pagamento_pago = $9,
-      pagamento_referencia = $10,
-      pagamentos_pagos = $11::jsonb,
-      faixa_atual = $12,
-      graus = $13,
-      ativo = $14,
-      user_id = $15
+      nome_responsavel = $6,
+      celular = $7,
+      data_nascimento = $8,
+      data_pagamento = $9,
+      pagamento_pago = $10,
+      pagamento_referencia = $11,
+      pagamentos_pagos = $12::jsonb,
+      faixa_atual = $13,
+      graus = $14,
+      ativo = $15,
+      user_id = $16
     WHERE id = $1
     RETURNING *`,
     [
@@ -260,6 +263,7 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       aluno.apelido ?? null,
       aluno.foto ?? null,
       aluno.emailResponsavel ?? null,
+      aluno.nomeResponsavel ?? null,
       aluno.celular ?? null,
       asDateOnly(aluno.dataNascimento) ?? null,
       aluno.dataPagamento == null ? null : String(aluno.dataPagamento),
@@ -413,15 +417,16 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
     for (const aluno of database.alunos) {
       await client.query(
         `INSERT INTO alunos (
-          id, nome, apelido, foto, email_responsavel, celular, data_nascimento, data_pagamento,
+          id, nome, apelido, foto, email_responsavel, nome_responsavel, celular, data_nascimento, data_pagamento,
           pagamento_pago, pagamento_referencia, pagamentos_pagos, faixa_atual, graus, user_id, created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15, $16)
         ON CONFLICT (id) DO UPDATE SET
           nome = EXCLUDED.nome,
           apelido = EXCLUDED.apelido,
           foto = EXCLUDED.foto,
           email_responsavel = EXCLUDED.email_responsavel,
+          nome_responsavel = EXCLUDED.nome_responsavel,
           celular = EXCLUDED.celular,
           data_nascimento = EXCLUDED.data_nascimento,
           data_pagamento = EXCLUDED.data_pagamento,
@@ -437,6 +442,7 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
           aluno.apelido ?? null,
           aluno.foto ?? null,
           aluno.emailResponsavel ?? null,
+          aluno.nomeResponsavel ?? null,
           aluno.celular ?? null,
           asDateOnly(aluno.dataNascimento) ?? null,
           aluno.dataPagamento == null ? null : String(aluno.dataPagamento),
