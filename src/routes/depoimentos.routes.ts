@@ -245,6 +245,7 @@ depoimentosRoutes.delete('/:id', requireProfessor, async (req, res, next) => {
     }
 
     const [removed] = database.depoimentos.splice(index, 1);
+    // writeDatabase faz upsert + remove do Postgres os ids que sairam da lista.
     await writeDatabase(database);
     res.json({ data: fullDepoimento(removed) });
   } catch (error) {

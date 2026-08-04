@@ -516,6 +516,13 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
       );
     }
 
+    const depoimentoIds = database.depoimentos.map((item) => item.id);
+    if (depoimentoIds.length === 0) {
+      await client.query('DELETE FROM depoimentos');
+    } else {
+      await client.query('DELETE FROM depoimentos WHERE id <> ALL($1::text[])', [depoimentoIds]);
+    }
+
     for (const presenca of database.presencas) {
       await client.query(
         `INSERT INTO presencas (id, aluno_id, data, aula_id, presente, marked_at, marked_by_user_id)
