@@ -118,6 +118,7 @@ export type Depoimento = {
   nome: string;
   texto: string;
   faixa?: string | null;
+  foto?: string | null;
   userId?: string | null;
   ativo: boolean;
   ordem: number;

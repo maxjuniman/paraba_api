@@ -14,14 +14,18 @@ const textoSchema = z
   .min(10, 'O depoimento deve ter pelo menos 10 caracteres.')
   .max(800, 'O depoimento deve ter no maximo 800 caracteres.');
 
+const fotoSchema = z.string().max(8_000_000).nullable().optional();
+
 const meuDepoimentoSchema = z.object({
   texto: textoSchema,
+  foto: fotoSchema,
 });
 
 const adminCreateSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome.').optional(),
   texto: textoSchema,
   faixa: z.string().trim().optional().nullable(),
+  foto: fotoSchema,
   ativo: z.boolean().optional(),
   ordem: z.number().int().min(0).max(9999).optional(),
 });
@@ -30,6 +34,7 @@ const adminPatchSchema = z.object({
   nome: z.string().trim().min(1).optional(),
   texto: textoSchema.optional(),
   faixa: z.string().trim().optional().nullable(),
+  foto: fotoSchema,
   ativo: z.boolean().optional(),
   ordem: z.number().int().min(0).max(9999).optional(),
 });
@@ -48,6 +53,7 @@ function publicDepoimento(item: Depoimento) {
     nome: item.nome,
     texto: item.texto,
     faixa: item.faixa ?? null,
+    foto: item.foto ?? null,
     ordem: item.ordem ?? 0,
   };
 }
@@ -136,12 +142,16 @@ depoimentosRoutes.put('/me', async (req, res, next) => {
       existing.texto = parsed.data.texto;
       existing.faixa = faixa;
       existing.ativo = aprovado;
+      if (parsed.data.foto !== undefined) {
+        existing.foto = parsed.data.foto;
+      }
     } else {
       const created: Depoimento = {
         id: randomUUID(),
         nome,
         texto: parsed.data.texto,
         faixa,
+        foto: parsed.data.foto ?? null,
         userId: user.id,
         ativo: aprovado,
         ordem: database.depoimentos.length,
@@ -193,6 +203,7 @@ depoimentosRoutes.post('/', requireProfessor, async (req, res, next) => {
       nome: parsed.data.nome?.trim() || req.user?.nome || 'Equipe Paraba',
       texto: parsed.data.texto,
       faixa: parsed.data.faixa?.trim() || null,
+      foto: parsed.data.foto ?? null,
       userId: null,
       ativo: parsed.data.ativo !== false,
       ordem: parsed.data.ordem ?? database.depoimentos.length,
@@ -225,6 +236,7 @@ depoimentosRoutes.patch('/:id', requireProfessor, async (req, res, next) => {
     if (parsed.data.nome !== undefined) item.nome = parsed.data.nome;
     if (parsed.data.texto !== undefined) item.texto = parsed.data.texto;
     if (parsed.data.faixa !== undefined) item.faixa = parsed.data.faixa;
+    if (parsed.data.foto !== undefined) item.foto = parsed.data.foto;
     if (parsed.data.ativo !== undefined) item.ativo = parsed.data.ativo;
     if (parsed.data.ordem !== undefined) item.ordem = parsed.data.ordem;
 

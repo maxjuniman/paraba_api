@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS depoimentos (
   nome TEXT NOT NULL,
   texto TEXT NOT NULL,
   faixa TEXT,
+  foto TEXT,
   user_id TEXT,
   ativo BOOLEAN NOT NULL DEFAULT TRUE,
   ordem INTEGER NOT NULL DEFAULT 0,

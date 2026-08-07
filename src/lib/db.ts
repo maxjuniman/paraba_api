@@ -160,6 +160,7 @@ async function readPostgresDatabase(): Promise<Database> {
         nome: row.nome,
         texto: row.texto,
         faixa: row.faixa ?? null,
+        foto: (row.foto as string | null | undefined) ?? null,
         userId: row.user_id ?? null,
         ativo: row.ativo !== false,
         ordem: Number(row.ordem ?? 0) || 0,
@@ -556,12 +557,13 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
 
     for (const depoimento of database.depoimentos) {
       await client.query(
-        `INSERT INTO depoimentos (id, nome, texto, faixa, user_id, ativo, ordem, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO depoimentos (id, nome, texto, faixa, foto, user_id, ativo, ordem, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO UPDATE SET
            nome = EXCLUDED.nome,
            texto = EXCLUDED.texto,
            faixa = EXCLUDED.faixa,
+           foto = EXCLUDED.foto,
            user_id = EXCLUDED.user_id,
            ativo = EXCLUDED.ativo,
            ordem = EXCLUDED.ordem`,
@@ -570,6 +572,7 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
           depoimento.nome,
           depoimento.texto,
           depoimento.faixa ?? null,
+          depoimento.foto ?? null,
           depoimento.userId ?? null,
           depoimento.ativo !== false,
           depoimento.ordem ?? 0,
