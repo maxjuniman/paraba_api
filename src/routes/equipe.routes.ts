@@ -40,12 +40,44 @@ function compareByFaixaThenGrausThenNome(
   return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
 }
 
+function isProfessorUser(tipo?: number | string): boolean {
+  return tipo === 1 || tipo === 'admin' || tipo === 'professor';
+}
+
+function professorApelido(nome: string): string {
+  const first = nome.trim().split(/\s+/)[0] || 'Professor';
+  return /^prof/i.test(first) ? first : `Prof ${first}`;
+}
+
 /** Lista publica da equipe (ativos) para o site de divulgacao. */
 equipeRoutes.get('/public', async (_req, res, next) => {
   try {
     const database = await readDatabase();
+
+    const professors = database.users
+      .filter((user) => isProfessorUser(user.tipo) && Boolean(user.foto?.trim()))
+      .map((user) => ({
+        id: `professor-${user.id}`,
+        nome: user.nome,
+        apelido: professorApelido(user.nome),
+        foto: user.foto ?? null,
+        faixaAtual: 'Preta' as string | null,
+        graus: 0,
+        isProfessor: true as const,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+
+    const professorAlunoIds = new Set(
+      database.users
+        .filter((user) => isProfessorUser(user.tipo) && user.foto?.trim() && user.alunoId)
+        .map((user) => user.alunoId as string)
+    );
+    const professorNames = new Set(professors.map((item) => item.nome.trim().toLowerCase()));
+
     const alunos = database.alunos
       .filter((aluno) => aluno.ativo !== false)
+      .filter((aluno) => !professorAlunoIds.has(aluno.id))
+      .filter((aluno) => !professorNames.has(aluno.nome.trim().toLowerCase()))
       .map((aluno) => ({
         id: aluno.id,
         nome: aluno.nome,
@@ -53,10 +85,11 @@ equipeRoutes.get('/public', async (_req, res, next) => {
         foto: aluno.foto ?? null,
         faixaAtual: normalizeFaixa(aluno),
         graus: normalizeGraus(aluno),
+        isProfessor: false as const,
       }))
       .sort(compareByFaixaThenGrausThenNome);
 
-    res.json({ data: alunos });
+    res.json({ data: [...professors, ...alunos] });
   } catch (error) {
     next(error);
   }
