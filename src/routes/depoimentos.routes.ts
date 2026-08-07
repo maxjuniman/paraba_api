@@ -76,9 +76,17 @@ depoimentosRoutes.get('/public', async (_req, res, next) => {
       .filter((item) => item.ativo === true)
       .map((item) => {
         const linked = item.userId ? usersById.get(item.userId) : undefined;
+        const linkedAluno = linked
+          ? database.alunos.find(
+              (aluno) =>
+                aluno.userId === linked.id &&
+                (linked.alunoId ? aluno.id === linked.alunoId : true)
+            ) || database.alunos.find((aluno) => aluno.userId === linked.id)
+          : undefined;
         return {
           ...publicDepoimento(item),
-          foto: linked?.foto ?? item.foto ?? null,
+          // Professor usa users.foto; aluno usa a mesma foto da Equipe (alunos.foto).
+          foto: linked?.foto ?? linkedAluno?.foto ?? item.foto ?? null,
         };
       })
       .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'));
