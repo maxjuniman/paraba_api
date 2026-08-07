@@ -306,6 +306,68 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
   return mapAluno(rows[0]);
 }
 
+export async function deleteAluno(alunoId: string): Promise<void> {
+  await ensurePostgres();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query('SELECT * FROM alunos WHERE id = $1 FOR UPDATE', [alunoId]);
+    const aluno = rows[0];
+    if (!aluno) {
+      throw new Error('Aluno nao encontrado.');
+    }
+
+    const linkedUserId = (aluno.user_id as string | null) ?? null;
+
+    await client.query('DELETE FROM presencas WHERE aluno_id = $1', [alunoId]);
+    await client.query('UPDATE videos SET aluno_id = NULL WHERE aluno_id = $1', [alunoId]);
+
+    await client.query('DELETE FROM alunos WHERE id = $1', [alunoId]);
+
+    if (linkedUserId) {
+      const remaining = await client.query(
+        'SELECT id FROM alunos WHERE user_id = $1 ORDER BY nome ASC',
+        [linkedUserId]
+      );
+
+      if (remaining.rows.length === 0) {
+        await client.query(
+          `UPDATE users
+           SET ativo = FALSE, aluno_id = NULL
+           WHERE id = $1 AND tipo = 2`,
+          [linkedUserId]
+        );
+      } else {
+        await client.query(
+          `UPDATE users
+           SET aluno_id = CASE
+             WHEN aluno_id = $2 OR aluno_id IS NULL THEN $3
+             ELSE aluno_id
+           END
+           WHERE id = $1`,
+          [linkedUserId, alunoId, remaining.rows[0].id]
+        );
+      }
+    } else {
+      await client.query(
+        `UPDATE users
+         SET aluno_id = NULL
+         WHERE aluno_id = $1`,
+        [alunoId]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function updateUser(user: User): Promise<User> {
   await ensurePostgres();
 

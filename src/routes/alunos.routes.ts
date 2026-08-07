@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { insertAluno, readDatabase, updateAluno, updateUser } from '../lib/db.js';
+import { insertAluno, readDatabase, updateAluno, updateUser, deleteAluno } from '../lib/db.js';
 import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
 import { MAX_ALUNOS_POR_USER } from '../lib/vinculos.js';
 import { authRequired } from '../middleware/authRequired.js';
@@ -366,13 +366,30 @@ alunosRoutes.patch('/:alunoId/ativo', async (req, res, next) => {
       ativo: parsed.data.ativo,
     });
 
-    const user = findLinkedUser(await readDatabase(), updatedAluno);
+    const refreshed = await readDatabase();
+    const user = findLinkedUser(refreshed, updatedAluno);
+
     if (user) {
-      await updateUser({ ...user, ativo: parsed.data.ativo });
+      if (parsed.data.ativo) {
+        await updateUser({ ...user, ativo: true });
+      } else {
+        const outrosAtivos = refreshed.alunos.some(
+          (item) => item.id !== updatedAluno.id && item.userId === user.id && item.ativo !== false
+        );
+        if (!outrosAtivos) {
+          await updateUser({ ...user, ativo: false });
+        } else if (user.alunoId === updatedAluno.id) {
+          const nextPrimary = refreshed.alunos.find(
+            (item) => item.id !== updatedAluno.id && item.userId === user.id && item.ativo !== false
+          );
+          if (nextPrimary) {
+            await updateUser({ ...user, alunoId: nextPrimary.id });
+          }
+        }
+      }
     }
 
-    const refreshed = await readDatabase();
-    res.json({ data: alunoWithDetails(refreshed, updatedAluno) });
+    res.json({ data: alunoWithDetails(await readDatabase(), updatedAluno) });
   } catch (error) {
     next(error);
   }
@@ -444,6 +461,38 @@ alunosRoutes.post('/:alunoId/desvincular-user', async (req, res, next) => {
     const refreshed = await readDatabase();
     res.json({ data: alunoWithDetails(refreshed, updatedAluno) });
   } catch (error) {
+    next(error);
+  }
+});
+
+alunosRoutes.delete('/:alunoId', async (req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+    if (!aluno) {
+      res.status(404).json({ message: 'Aluno nao encontrado.' });
+      return;
+    }
+
+    if (aluno.ativo !== false) {
+      res.status(400).json({ message: 'Desative o aluno antes de excluir.' });
+      return;
+    }
+
+    await deleteAluno(aluno.id);
+    res.json({
+      data: {
+        id: aluno.id,
+        nome: aluno.nome,
+      },
+      message: 'Aluno excluido com sucesso.',
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Aluno nao encontrado.') {
+      res.status(404).json({ message: error.message });
+      return;
+    }
     next(error);
   }
 });
