@@ -20,6 +20,8 @@ export function toPublicUser(user: User): PublicUser {
     ativo: user.ativo ?? true,
     alunoId: user.alunoId ?? null,
     foto: user.foto ?? null,
+    faixaAtual: user.faixaAtual ?? null,
+    graus: user.graus ?? 0,
   };
 }
 

@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
   ativo BOOLEAN NOT NULL DEFAULT FALSE,
   aluno_id TEXT,
   foto TEXT,
+  faixa_atual TEXT,
+  graus INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

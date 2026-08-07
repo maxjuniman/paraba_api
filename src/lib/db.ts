@@ -73,6 +73,8 @@ function mapUser(row: Record<string, unknown>): User {
     alunoId: (row.aluno_id as string | null | undefined) ?? null,
     pushToken: (row.push_token as string | null | undefined) ?? null,
     foto: (row.foto as string | null | undefined) ?? null,
+    faixaAtual: (row.faixa_atual as string | null | undefined) ?? null,
+    graus: Number(row.graus ?? 0) || 0,
     createdAt: asIso(row.created_at),
   };
 }
@@ -383,7 +385,9 @@ export async function updateUser(user: User): Promise<User> {
       ativo = $7,
       aluno_id = $8,
       push_token = COALESCE($9, push_token),
-      foto = $10
+      foto = $10,
+      faixa_atual = $11,
+      graus = $12
     WHERE id = $1
     RETURNING *`,
     [
@@ -397,6 +401,8 @@ export async function updateUser(user: User): Promise<User> {
       user.alunoId ?? null,
       user.pushToken ?? null,
       user.foto ?? null,
+      user.faixaAtual ?? null,
+      user.graus ?? 0,
     ]
   );
 
@@ -447,8 +453,8 @@ export async function insertUser(user: User): Promise<User> {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO users (id, nome, email, celular, password_hash, tipo, ativo, aluno_id, foto, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO users (id, nome, email, celular, password_hash, tipo, ativo, aluno_id, foto, faixa_atual, graus, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       user.id,
@@ -460,6 +466,8 @@ export async function insertUser(user: User): Promise<User> {
       asBoolean(user.ativo, user.tipo === 1),
       user.alunoId ?? null,
       user.foto ?? null,
+      user.faixaAtual ?? null,
+      user.graus ?? 0,
       user.createdAt,
     ]
   );
@@ -475,11 +483,11 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
     for (const user of database.users) {
       const passwordHash = user.passwordHash?.trim() || null;
       await client.query(
-        `INSERT INTO users (id, nome, email, celular, password_hash, tipo, ativo, aluno_id, foto, created_at)
+        `INSERT INTO users (id, nome, email, celular, password_hash, tipo, ativo, aluno_id, foto, faixa_atual, graus, created_at)
          VALUES (
            $1, $2, $3, $4,
            COALESCE($5, (SELECT password_hash FROM users WHERE id = $1), 'missing-hash'),
-           $6, $7, $8, $9, $10
+           $6, $7, $8, $9, $10, $11, $12
          )
          ON CONFLICT (id) DO UPDATE SET
            nome = EXCLUDED.nome,
@@ -489,7 +497,9 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
            tipo = EXCLUDED.tipo,
            ativo = EXCLUDED.ativo,
            aluno_id = EXCLUDED.aluno_id,
-           foto = EXCLUDED.foto`,
+           foto = EXCLUDED.foto,
+           faixa_atual = EXCLUDED.faixa_atual,
+           graus = EXCLUDED.graus`,
         [
           user.id,
           user.nome,
@@ -500,6 +510,8 @@ async function upsertPostgresDatabase(database: Database): Promise<void> {
           asBoolean(user.ativo, user.tipo === 1),
           user.alunoId ?? null,
           user.foto ?? null,
+          user.faixaAtual ?? null,
+          user.graus ?? 0,
           user.createdAt,
         ]
       );

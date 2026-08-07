@@ -11,6 +11,8 @@ export type User = {
   alunoId?: string | null;
   pushToken?: string | null;
   foto?: string | null;
+  faixaAtual?: string | null;
+  graus?: number | null;
   createdAt: string;
 };
 
@@ -23,6 +25,8 @@ export type PublicUser = {
   ativo: boolean;
   alunoId?: string | null;
   foto?: string | null;
+  faixaAtual?: string | null;
+  graus?: number | null;
 };
 
 export type Aluno = {

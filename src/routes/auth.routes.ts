@@ -25,10 +25,21 @@ const registerSchema = z.object({
   confirmacao_senha: z.string().min(6),
 });
 
+const FAIXAS = ['Branca', 'Cinza', 'Amarela', 'Laranja', 'Verde', 'Azul', 'Roxa', 'Marrom', 'Preta'] as const;
+
 const updateMeSchema = z.object({
   nome: z.string().trim().min(1, 'Informe seu nome.'),
   celular: z.string().trim().optional().default(''),
   foto: z.string().max(8_000_000).nullable().optional(),
+  faixaAtual: z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .refine((value) => value == null || value === '' || FAIXAS.includes(value as (typeof FAIXAS)[number]), {
+      message: 'Faixa invalida.',
+    }),
+  graus: z.number().int().min(0).max(4).optional(),
   novaSenha: z.string().min(6, 'A nova senha deve ter pelo menos 6 caracteres.').optional(),
 });
 
@@ -152,6 +163,10 @@ authRoutes.patch('/me', authRequired, async (req, res, next) => {
       celular: parsed.data.celular || undefined,
       passwordHash,
       ...(parsed.data.foto !== undefined ? { foto: parsed.data.foto } : {}),
+      ...(parsed.data.faixaAtual !== undefined
+        ? { faixaAtual: parsed.data.faixaAtual?.trim() || null }
+        : {}),
+      ...(parsed.data.graus !== undefined ? { graus: parsed.data.graus } : {}),
     });
 
     res.json({ data: toPublicUser(updated) });

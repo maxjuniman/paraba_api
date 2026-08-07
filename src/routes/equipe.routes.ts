@@ -61,8 +61,8 @@ equipeRoutes.get('/public', async (_req, res, next) => {
         nome: user.nome,
         apelido: professorApelido(user.nome),
         foto: user.foto ?? null,
-        faixaAtual: 'Preta' as string | null,
-        graus: 0,
+        faixaAtual: user.faixaAtual?.trim() || 'Preta',
+        graus: Number.isFinite(Number(user.graus)) ? Math.max(0, Math.min(4, Number(user.graus))) : 0,
         isProfessor: true as const,
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
