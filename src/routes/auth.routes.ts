@@ -25,23 +25,12 @@ const registerSchema = z.object({
   confirmacao_senha: z.string().min(6),
 });
 
-const updateMeSchema = z
-  .object({
-    nome: z.string().trim().min(1, 'Informe seu nome.'),
-    celular: z.string().trim().optional().default(''),
-    foto: z.string().max(8_000_000).nullable().optional(),
-    senhaAtual: z.string().optional(),
-    novaSenha: z.string().min(6, 'A nova senha deve ter pelo menos 6 caracteres.').optional(),
-  })
-  .superRefine((body, ctx) => {
-    if (body.novaSenha && !body.senhaAtual) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Informe a senha atual para alterar a senha.',
-        path: ['senhaAtual'],
-      });
-    }
-  });
+const updateMeSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe seu nome.'),
+  celular: z.string().trim().optional().default(''),
+  foto: z.string().max(8_000_000).nullable().optional(),
+  novaSenha: z.string().min(6, 'A nova senha deve ter pelo menos 6 caracteres.').optional(),
+});
 
 function sessionPayload(user: User) {
   return {
@@ -154,11 +143,6 @@ authRoutes.patch('/me', authRequired, async (req, res, next) => {
     let passwordHash = user.passwordHash;
 
     if (parsed.data.novaSenha) {
-      const matches = await bcrypt.compare(parsed.data.senhaAtual ?? '', user.passwordHash);
-      if (!matches) {
-        res.status(400).json({ message: 'Senha atual incorreta.' });
-        return;
-      }
       passwordHash = await bcrypt.hash(parsed.data.novaSenha, 10);
     }
 
