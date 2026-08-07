@@ -212,14 +212,24 @@ alunosRoutes.patch('/:alunoId', async (req, res, next) => {
       ...existing,
       nome: parsed.data.nome,
       apelido: parsed.data.apelido || null,
-      foto: parsed.data.foto || null,
-      emailResponsavel: parsed.data.emailResponsavel || undefined,
-      nomeResponsavel: parsed.data.nomeResponsavel || null,
+      foto: parsed.data.foto !== undefined ? parsed.data.foto || null : existing.foto,
+      emailResponsavel:
+        parsed.data.emailResponsavel !== undefined
+          ? parsed.data.emailResponsavel || undefined
+          : existing.emailResponsavel,
+      nomeResponsavel:
+        parsed.data.nomeResponsavel !== undefined
+          ? parsed.data.nomeResponsavel || null
+          : existing.nomeResponsavel,
       celular: parsed.data.celular,
       dataNascimento: parsed.data.dataNascimento,
-      dataPagamento: parsed.data.dataPagamento || null,
-      faixaAtual: parsed.data.faixaAtual || null,
-      graus: parsed.data.graus ?? 0,
+      dataPagamento:
+        parsed.data.dataPagamento !== undefined
+          ? parsed.data.dataPagamento || null
+          : existing.dataPagamento,
+      faixaAtual:
+        parsed.data.faixaAtual !== undefined ? parsed.data.faixaAtual || null : existing.faixaAtual,
+      graus: parsed.data.graus !== undefined ? parsed.data.graus : (existing.graus ?? 0),
     });
 
     const refreshed = await readDatabase();
