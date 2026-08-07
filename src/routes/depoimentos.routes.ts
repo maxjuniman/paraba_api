@@ -71,9 +71,16 @@ function fullDepoimento(item: Depoimento) {
 depoimentosRoutes.get('/public', async (_req, res, next) => {
   try {
     const database = await readDatabase();
+    const usersById = new Map(database.users.map((user) => [user.id, user]));
     const depoimentos = database.depoimentos
       .filter((item) => item.ativo === true)
-      .map(publicDepoimento)
+      .map((item) => {
+        const linked = item.userId ? usersById.get(item.userId) : undefined;
+        return {
+          ...publicDepoimento(item),
+          foto: linked?.foto ?? item.foto ?? null,
+        };
+      })
       .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'));
 
     res.json({ data: depoimentos });

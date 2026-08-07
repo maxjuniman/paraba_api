@@ -29,6 +29,7 @@ const updateMeSchema = z
   .object({
     nome: z.string().trim().min(1, 'Informe seu nome.'),
     celular: z.string().trim().optional().default(''),
+    foto: z.string().max(8_000_000).nullable().optional(),
     senhaAtual: z.string().optional(),
     novaSenha: z.string().min(6, 'A nova senha deve ter pelo menos 6 caracteres.').optional(),
   })
@@ -166,6 +167,7 @@ authRoutes.patch('/me', authRequired, async (req, res, next) => {
       nome: parsed.data.nome,
       celular: parsed.data.celular || undefined,
       passwordHash,
+      ...(parsed.data.foto !== undefined ? { foto: parsed.data.foto } : {}),
     });
 
     res.json({ data: toPublicUser(updated) });

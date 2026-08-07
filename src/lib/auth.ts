@@ -19,6 +19,7 @@ export function toPublicUser(user: User): PublicUser {
     tipo: user.tipo,
     ativo: user.ativo ?? true,
     alunoId: user.alunoId ?? null,
+    foto: user.foto ?? null,
   };
 }
 

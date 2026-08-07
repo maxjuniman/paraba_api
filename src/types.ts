@@ -10,6 +10,7 @@ export type User = {
   ativo: boolean;
   alunoId?: string | null;
   pushToken?: string | null;
+  foto?: string | null;
   createdAt: string;
 };
 
@@ -21,6 +22,7 @@ export type PublicUser = {
   tipo: UserType;
   ativo: boolean;
   alunoId?: string | null;
+  foto?: string | null;
 };
 
 export type Aluno = {
