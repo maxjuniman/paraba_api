@@ -4,3 +4,6 @@ dist
 npm-debug.log*
 data/db.json
 data/*.json
+uploads/videos/*
+!uploads/.gitkeep
+!uploads/videos/.gitkeep

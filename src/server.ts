@@ -3,6 +3,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { env } from './config/env.js';
 import { initDatabase } from './lib/db.js';
+import { UPLOADS_ROOT, ensureVideoUploadDir } from './lib/videoStorage.js';
 import { alunosRoutes } from './routes/alunos.routes.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { calendarioRoutes } from './routes/calendario.routes.js';
@@ -48,12 +49,15 @@ function resolveCorsOrigin(): boolean | string | RegExp | (string | RegExp)[] | 
   };
 }
 
+ensureVideoUploadDir();
+
 app.use(
   cors({
     origin: resolveCorsOrigin(),
   })
 );
 app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(UPLOADS_ROOT, { fallthrough: true, maxAge: '7d' }));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', database: 'postgres' });
