@@ -81,6 +81,7 @@ const fotoSchema = z.object({
     .min(1, 'Informe a foto.')
     .max(8_000_000, 'A foto enviada e muito grande.')
     .nullable(),
+  aluno_id: z.string().trim().min(1).optional(),
 });
 
 function normalizeBirthDate(aluno: AlunoWithLegacyFields): string | null {
@@ -381,7 +382,19 @@ equipeRoutes.patch('/me/foto', async (req, res, next) => {
     }
 
     const database = await readDatabase();
-    const aluno = findLinkedAluno(database.alunos, currentUser.id, currentUser.alunoId);
+    let aluno: Aluno | undefined;
+
+    if (parsed.data.aluno_id) {
+      aluno = database.alunos.find(
+        (item) => item.id === parsed.data.aluno_id && item.userId === currentUser.id
+      );
+      if (!aluno) {
+        res.status(400).json({ message: 'Aluno nao esta vinculado ao seu usuario.' });
+        return;
+      }
+    } else {
+      aluno = findLinkedAluno(database.alunos, currentUser.id, currentUser.alunoId);
+    }
 
     if (!aluno) {
       res.status(404).json({ message: 'Nenhum aluno vinculado ao seu usuario.' });
