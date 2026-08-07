@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
 import { insertAluno, readDatabase, updateAluno, updateUser, deleteAluno } from '../lib/db.js';
@@ -59,6 +60,16 @@ const pagamentoStatusSchema = z.object({
 const ativoSchema = z.object({
   ativo: z.boolean(),
 });
+
+const senhaAlunoSchema = z
+  .object({
+    senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
+    confirmacao_senha: z.string().min(6, 'Confirme a senha.'),
+  })
+  .refine((body) => body.senha === body.confirmacao_senha, {
+    message: 'A confirmacao de senha nao confere.',
+    path: ['confirmacao_senha'],
+  });
 
 function userPreview(user?: { id: string; nome: string; email: string; ativo?: boolean } | null) {
   if (!user) return null;
@@ -339,6 +350,46 @@ alunosRoutes.patch('/:alunoId/pagamento-status', async (req, res, next) => {
       pagamentoReferencia: parsed.data.referencia,
     });
     res.json({ data: alunoWithDetails(database, updatedAluno) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+alunosRoutes.patch('/:alunoId/senha', async (req, res, next) => {
+  try {
+    const parsed = senhaAlunoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const aluno = database.alunos.find((item) => item.id === req.params.alunoId);
+
+    if (!aluno) {
+      res.status(404).json({ message: 'Aluno nao encontrado.' });
+      return;
+    }
+
+    const user = findLinkedUser(database, aluno);
+    if (!user || !aluno.userId) {
+      res.status(400).json({ message: 'Este aluno nao possui usuario vinculado.' });
+      return;
+    }
+
+    await updateUser({
+      ...user,
+      passwordHash: await bcrypt.hash(parsed.data.senha, 10),
+    });
+
+    res.json({
+      message: 'Senha atualizada com sucesso.',
+      data: {
+        alunoId: aluno.id,
+        userId: user.id,
+        email: user.email,
+      },
+    });
   } catch (error) {
     next(error);
   }
