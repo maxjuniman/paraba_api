@@ -152,6 +152,10 @@ UPDATE users
 SET ativo = TRUE
 WHERE tipo = 1 AND ativo IS DISTINCT FROM TRUE;
 
+-- Permite 1 usuario vinculado a ate 2 alunos (remove UNIQUE legado em user_id).
+ALTER TABLE alunos DROP CONSTRAINT IF EXISTS alunos_user_id_key;
+DROP INDEX IF EXISTS alunos_user_id_key;
+
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
 CREATE INDEX IF NOT EXISTS alunos_user_id_idx ON alunos (user_id);
 CREATE INDEX IF NOT EXISTS presencas_aluno_id_idx ON presencas (aluno_id);
