@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { readDatabase, updateAluno } from '../lib/db.js';
+import { toPublicUser } from '../lib/auth.js';
+import { readDatabase, updateAluno, updateUser } from '../lib/db.js';
+import { MAX_ALUNOS_POR_USER } from '../lib/vinculos.js';
 import { authRequired } from '../middleware/authRequired.js';
 import type { Aluno } from '../types.js';
 
@@ -186,15 +188,13 @@ function toMeuAluno(aluno: Aluno, cadastroAppAt?: string | null) {
 }
 
 function findLinkedAluno(alunos: Aluno[], userId: string, alunoId?: string | null): Aluno | undefined {
-  // Prioriza o aluno que tem o user vinculado no cadastro.
-  const byUserId = alunos.find((aluno) => aluno.userId === userId);
-  if (byUserId) return byUserId;
-
+  // Prioriza o aluno primario do usuario quando houver mais de um vinculo.
   if (alunoId) {
-    return alunos.find((aluno) => aluno.id === alunoId);
+    const primary = alunos.find((aluno) => aluno.id === alunoId && (!aluno.userId || aluno.userId === userId));
+    if (primary) return primary;
   }
 
-  return undefined;
+  return alunos.find((aluno) => aluno.userId === userId);
 }
 
 function findLinkedUser(
@@ -266,6 +266,106 @@ equipeRoutes.get('/me', async (req, res, next) => {
     next(error);
   }
 });
+
+equipeRoutes.get('/meus-alunos', async (req, res, next) => {
+  try {
+    const currentUser = req.user;
+    if (!currentUser || !isAlunoUser(currentUser.tipo)) {
+      res.status(403).json({ message: 'Apenas usuarios alunos podem consultar os proprios vinculos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const user = database.users.find((item) => item.id === currentUser.id);
+    if (!user) {
+      res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return;
+    }
+
+    const alunos = database.alunos
+      .filter((aluno) => aluno.userId === user.id)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .map((aluno) => ({
+        id: aluno.id,
+        nome: aluno.nome,
+        apelido: aluno.apelido ?? null,
+        celular: aluno.celular ?? '',
+        ativo: aluno.ativo !== false,
+        faixaAtual: aluno.faixaAtual ?? null,
+        primario: user.alunoId === aluno.id,
+      }));
+
+    res.json({
+      data: {
+        user: toPublicUser(user),
+        alunos,
+        alunoPrimarioId: user.alunoId ?? null,
+        maxAlunos: MAX_ALUNOS_POR_USER,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const alunoPrimarioSchema = z.object({
+  aluno_id: z.string().trim().min(1, 'Informe o aluno primario.'),
+});
+
+equipeRoutes.patch('/me/aluno-primario', async (req, res, next) => {
+  try {
+    const currentUser = req.user;
+    if (!currentUser || !isAlunoUser(currentUser.tipo)) {
+      res.status(403).json({ message: 'Apenas usuarios alunos podem definir o aluno primario.' });
+      return;
+    }
+
+    const parsed = alunoPrimarioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const user = database.users.find((item) => item.id === currentUser.id);
+    if (!user) {
+      res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return;
+    }
+
+    const aluno = database.alunos.find((item) => item.id === parsed.data.aluno_id);
+    if (!aluno || aluno.userId !== user.id) {
+      res.status(400).json({ message: 'Aluno nao esta vinculado ao seu usuario.' });
+      return;
+    }
+
+    const updatedUser = await updateUser({ ...user, alunoId: aluno.id });
+    const alunos = (await readDatabase()).alunos
+      .filter((item) => item.userId === updatedUser.id)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        apelido: item.apelido ?? null,
+        celular: item.celular ?? '',
+        ativo: item.ativo !== false,
+        faixaAtual: item.faixaAtual ?? null,
+        primario: updatedUser.alunoId === item.id,
+      }));
+
+    res.json({
+      data: {
+        user: toPublicUser(updatedUser),
+        alunos,
+        alunoPrimarioId: updatedUser.alunoId ?? null,
+        maxAlunos: MAX_ALUNOS_POR_USER,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 equipeRoutes.patch('/me/foto', async (req, res, next) => {
   try {
     const currentUser = req.user;

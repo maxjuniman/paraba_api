@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { getBearerToken, jwtSecret, signAccessToken, toPublicUser } from '../lib/auth.js';
 import { insertAluno, insertUser, readDatabase, updateAluno, updateUser } from '../lib/db.js';
 import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
+import { MAX_ALUNOS_POR_USER } from '../lib/vinculos.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 
@@ -58,6 +59,27 @@ const professorSchema = z.object({
   senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
   confirmacao_senha: z.string().min(6),
 });
+
+const alunoPrimarioSchema = z.object({
+  aluno_id: z.string().trim().min(1, 'Informe o aluno primario.'),
+});
+
+function alunosVinculados(
+  alunos: Awaited<ReturnType<typeof readDatabase>>['alunos'],
+  userId: string
+) {
+  return alunos
+    .filter((aluno) => aluno.userId === userId)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    .map((aluno) => ({
+      id: aluno.id,
+      nome: aluno.nome,
+      apelido: aluno.apelido ?? null,
+      celular: aluno.celular ?? '',
+      ativo: aluno.ativo !== false,
+      faixaAtual: aluno.faixaAtual ?? null,
+    }));
+}
 
 /** Publico se ainda nao houver professor; depois exige professor autenticado. */
 usersRoutes.post('/professores', async (req, res, next) => {
@@ -147,6 +169,88 @@ usersRoutes.get('/pendentes', async (_req, res, next) => {
   }
 });
 
+usersRoutes.get('/ativos', async (_req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const users = database.users
+      .filter((user) => user.tipo === 2 && user.ativo !== false)
+      .map((user) => {
+        const alunos = alunosVinculados(database.alunos, user.id);
+        return {
+          ...toPublicUser(user),
+          alunos,
+          alunosCount: alunos.length,
+          maxAlunos: MAX_ALUNOS_POR_USER,
+        };
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+    res.json({ data: users });
+  } catch (error) {
+    next(error);
+  }
+});
+
+usersRoutes.get('/:userId/alunos', async (req, res, next) => {
+  try {
+    const database = await readDatabase();
+    const user = database.users.find((item) => item.id === req.params.userId);
+
+    if (!user) {
+      res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return;
+    }
+
+    const alunos = alunosVinculados(database.alunos, user.id);
+    res.json({
+      data: {
+        user: toPublicUser(user),
+        alunos,
+        alunoPrimarioId: user.alunoId ?? null,
+        maxAlunos: MAX_ALUNOS_POR_USER,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+usersRoutes.patch('/:userId/aluno-primario', async (req, res, next) => {
+  try {
+    const parsed = alunoPrimarioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const database = await readDatabase();
+    const user = database.users.find((item) => item.id === req.params.userId);
+
+    if (!user) {
+      res.status(404).json({ message: 'Usuario nao encontrado.' });
+      return;
+    }
+
+    const aluno = database.alunos.find((item) => item.id === parsed.data.aluno_id);
+    if (!aluno || aluno.userId !== user.id) {
+      res.status(400).json({ message: 'Aluno nao esta vinculado a este usuario.' });
+      return;
+    }
+
+    const updatedUser = await updateUser({ ...user, alunoId: aluno.id });
+    res.json({
+      data: {
+        user: toPublicUser(updatedUser),
+        alunos: alunosVinculados((await readDatabase()).alunos, user.id),
+        alunoPrimarioId: updatedUser.alunoId ?? null,
+        maxAlunos: MAX_ALUNOS_POR_USER,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
   try {
     const parsed = autorizarSchema.safeParse(req.body);
@@ -222,8 +326,20 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
       return;
     }
 
+    const jaVinculados = database.alunos.filter((item) => item.userId === user.id);
+    if (!aluno.userId && jaVinculados.length >= MAX_ALUNOS_POR_USER) {
+      res.status(400).json({
+        message: `Cada usuario pode ter no maximo ${MAX_ALUNOS_POR_USER} alunos vinculados.`,
+      });
+      return;
+    }
+
     const updatedAluno = await updateAluno({ ...aluno, userId: user.id });
-    const updatedUser = await updateUser({ ...user, ativo: true, alunoId: aluno.id });
+    const updatedUser = await updateUser({
+      ...user,
+      ativo: true,
+      alunoId: user.alunoId || aluno.id,
+    });
 
     res.json({
       data: {

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { insertAluno, readDatabase, updateAluno, updateUser } from '../lib/db.js';
 import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
+import { MAX_ALUNOS_POR_USER } from '../lib/vinculos.js';
 import { authRequired } from '../middleware/authRequired.js';
 import { requireProfessor } from '../middleware/requireProfessor.js';
 import type { Aluno } from '../types.js';
@@ -240,8 +241,35 @@ alunosRoutes.post('/:alunoId/vincular-user', async (req, res, next) => {
       return;
     }
 
+    if (user.tipo !== 2) {
+      res.status(400).json({ message: 'Apenas usuarios alunos podem ser vinculados a cadastros de aluno.' });
+      return;
+    }
+
+    if (aluno.userId && aluno.userId !== user.id) {
+      res.status(409).json({ message: 'Este aluno ja esta vinculado a outro usuario.' });
+      return;
+    }
+
+    if (aluno.userId === user.id) {
+      res.json({ data: { ...alunoWithDetails(database, aluno), user: userPreview(user) } });
+      return;
+    }
+
+    const vinculados = database.alunos.filter((item) => item.userId === user.id);
+    if (vinculados.length >= MAX_ALUNOS_POR_USER) {
+      res.status(400).json({
+        message: `Cada usuario pode ter no maximo ${MAX_ALUNOS_POR_USER} alunos vinculados.`,
+      });
+      return;
+    }
+
     const updatedAluno = await updateAluno({ ...aluno, userId: user.id });
-    const updatedUser = await updateUser({ ...user, alunoId: aluno.id });
+    const updatedUser = await updateUser({
+      ...user,
+      ativo: true,
+      alunoId: user.alunoId || aluno.id,
+    });
 
     res.json({ data: { ...updatedAluno, user: userPreview(updatedUser) } });
   } catch (error) {
@@ -392,18 +420,28 @@ alunosRoutes.post('/:alunoId/desvincular-user', async (req, res, next) => {
       return;
     }
 
-    const user = database.users.find((item) => item.id === aluno.userId);
+    const linkedUserId = aluno.userId;
+    const user = database.users.find((item) => item.id === linkedUserId);
+    const updatedAluno = await updateAluno({ ...aluno, userId: null, user: null });
 
     if (!user) {
-      const updatedAluno = await updateAluno({ ...aluno, userId: null, user: null });
       res.json({ data: alunoWithDetails(await readDatabase(), updatedAluno) });
       return;
     }
 
-    await updateUser({ ...user, ativo: false, alunoId: null });
-    const updatedAluno = await updateAluno({ ...aluno, userId: null, user: null });
-    const refreshed = await readDatabase();
+    const remaining = (await readDatabase()).alunos.filter((item) => item.userId === linkedUserId);
 
+    if (remaining.length === 0) {
+      await updateUser({ ...user, ativo: false, alunoId: null });
+    } else {
+      const nextPrimary =
+        user.alunoId && remaining.some((item) => item.id === user.alunoId)
+          ? user.alunoId
+          : remaining[0]?.id ?? null;
+      await updateUser({ ...user, alunoId: nextPrimary });
+    }
+
+    const refreshed = await readDatabase();
     res.json({ data: alunoWithDetails(refreshed, updatedAluno) });
   } catch (error) {
     next(error);
