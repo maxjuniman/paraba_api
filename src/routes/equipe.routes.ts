@@ -277,11 +277,31 @@ equipeRoutes.get('/', async (req, res) => {
   }
 
   const database = await readDatabase();
+  const currentUserId = req.user?.id;
+  const primaryAlunoId = req.user?.alunoId ?? null;
+
+  const meusAlunos = database.alunos.filter(
+    (aluno) =>
+      aluno.userId === currentUserId ||
+      (primaryAlunoId != null && aluno.id === primaryAlunoId)
+  );
+
+  const meusTipoIds = new Set(
+    meusAlunos.flatMap((aluno) => (Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : []))
+  );
+  const meusAlunoIds = new Set(meusAlunos.map((aluno) => aluno.id));
+
   const alunos = database.alunos
     .filter((aluno) => aluno.ativo !== false)
+    .filter((aluno) => {
+      if (meusAlunoIds.has(aluno.id)) return true;
+      if (meusTipoIds.size === 0) return false;
+      const ids = Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [];
+      return ids.some((id) => meusTipoIds.has(id));
+    })
     .map((aluno) => {
-      const linkedUser = findLinkedUser(database.users, aluno, req.user?.id);
-      return toEquipeAluno(aluno, req.user?.id, req.user?.alunoId, linkedUser?.createdAt ?? null);
+      const linkedUser = findLinkedUser(database.users, aluno, currentUserId);
+      return toEquipeAluno(aluno, currentUserId, primaryAlunoId, linkedUser?.createdAt ?? null);
     })
     .sort(compareByFaixaThenGrausThenNome);
 
