@@ -265,16 +265,34 @@ calendarioRoutes.get('/', async (req, res) => {
   let aulasCalendario = database.aulasCalendario;
 
   if (alunoViewer) {
-    const aluno = findLinkedAluno(database.alunos, req.user?.id, req.user?.alunoId);
-    if (!aluno) {
+    const currentUserId = req.user?.id;
+    const primaryAlunoId = req.user?.alunoId ?? null;
+    const meusAlunos = database.alunos.filter(
+      (aluno) =>
+        aluno.userId === currentUserId ||
+        (primaryAlunoId != null && aluno.id === primaryAlunoId)
+    );
+
+    if (meusAlunos.length === 0) {
       res.json({ data: { mes: range.month, aulas: [] } });
       return;
     }
 
+    const aluno = findLinkedAluno(database.alunos, currentUserId, primaryAlunoId) ?? meusAlunos[0];
     const studentCategory = studentCategoryId(aluno.dataNascimento);
-    aulasCalendario = aulasCalendario.filter((aula) =>
-      aulaMatchesStudentCategory(aula.categorias, studentCategory)
+    const tipoIds = new Set(
+      meusAlunos.flatMap((item) => (Array.isArray(item.tiposAulaIds) ? item.tiposAulaIds : []))
     );
+
+    aulasCalendario = aulasCalendario.filter((aula) => {
+      if (tipoIds.size > 0 && !tipoIds.has(aula.tipoAulaId)) {
+        return false;
+      }
+      if (tipoIds.size === 0) {
+        return false;
+      }
+      return aulaMatchesStudentCategory(aula.categorias, studentCategory);
+    });
   }
 
   // Proximas/Passadas fica no app. Aluno nao recebe lista de presentes.

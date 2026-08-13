@@ -53,20 +53,45 @@ function isTipoZumba(nome?: string | null): boolean {
   return Boolean(nome && /zumba/i.test(nome.trim()));
 }
 
+function normalizeTipoNome(nome: string): string {
+  return nome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isTipoJiuJitsu(nome?: string | null): boolean {
+  if (!nome) return false;
+  return /jiu[\s-]?jitsu|jiujitsu|\bbjj\b/.test(normalizeTipoNome(nome));
+}
+
+function alunoTiposNomes(
+  aluno: Aluno,
+  tiposAula: { id: string; nome: string }[]
+): string[] {
+  const ids = Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [];
+  return ids
+    .map((id) => tiposAula.find((tipo) => tipo.id === id)?.nome ?? null)
+    .filter((nome): nome is string => Boolean(nome));
+}
+
 /** Aluno so de Zumba nao entra em "Nossos lutadores". */
 function isSomenteZumba(
   aluno: Aluno,
   tiposAula: { id: string; nome: string }[]
 ): boolean {
-  const ids = Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [];
-  if (ids.length === 0) return false;
-
-  const nomes = ids
-    .map((id) => tiposAula.find((tipo) => tipo.id === id)?.nome ?? null)
-    .filter((nome): nome is string => Boolean(nome));
-
+  const nomes = alunoTiposNomes(aluno, tiposAula);
   if (nomes.length === 0) return false;
   return nomes.every((nome) => isTipoZumba(nome));
+}
+
+/** Lutadores: precisa ter ao menos um tipo de jiu-jitsu. */
+function praticaJiuJitsu(
+  aluno: Aluno,
+  tiposAula: { id: string; nome: string }[]
+): boolean {
+  return alunoTiposNomes(aluno, tiposAula).some((nome) => isTipoJiuJitsu(nome));
 }
 
 /** Lista publica da equipe (ativos) para o site de divulgacao. */
@@ -99,6 +124,7 @@ equipeRoutes.get('/public', async (_req, res, next) => {
       .filter((aluno) => !professorAlunoIds.has(aluno.id))
       .filter((aluno) => !professorNames.has(aluno.nome.trim().toLowerCase()))
       .filter((aluno) => !isSomenteZumba(aluno, database.tiposAula))
+      .filter((aluno) => praticaJiuJitsu(aluno, database.tiposAula))
       .map((aluno) => ({
         id: aluno.id,
         nome: aluno.nome,
@@ -106,11 +132,17 @@ equipeRoutes.get('/public', async (_req, res, next) => {
         foto: aluno.foto ?? null,
         faixaAtual: normalizeFaixa(aluno),
         graus: normalizeGraus(aluno),
+        showFaixa: true,
         isProfessor: false as const,
       }))
       .sort(compareByFaixaThenGrausThenNome);
 
-    res.json({ data: [...professors, ...alunos] });
+    res.json({
+      data: [
+        ...professors.map((item) => ({ ...item, showFaixa: true })),
+        ...alunos,
+      ],
+    });
   } catch (error) {
     next(error);
   }
@@ -181,11 +213,17 @@ function toEquipeAluno(
   aluno: Aluno,
   currentUserId?: string,
   currentAlunoId?: string | null,
-  cadastroAppAt?: string | null
+  cadastroAppAt?: string | null,
+  tiposAulaCatalog: Array<{ id: string; nome: string }> = []
 ) {
   const isMe = Boolean(
     (currentUserId && aluno.userId === currentUserId) || (currentAlunoId && aluno.id === currentAlunoId)
   );
+
+  const tiposAula = (Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [])
+    .map((id) => tiposAulaCatalog.find((tipo) => tipo.id === id))
+    .filter((tipo): tipo is { id: string; nome: string } => Boolean(tipo))
+    .map((tipo) => ({ id: tipo.id, nome: tipo.nome }));
 
   return {
     id: aluno.id,
@@ -195,6 +233,8 @@ function toEquipeAluno(
     dataNascimento: normalizeBirthDate(aluno),
     faixaAtual: normalizeFaixa(aluno),
     graus: normalizeGraus(aluno),
+    tiposAula,
+    showFaixa: tiposAula.some((tipo) => isTipoJiuJitsu(tipo.nome)),
     isMe,
     ...(isMe
       ? {
@@ -230,6 +270,7 @@ function toMeuAluno(aluno: Aluno, cadastroAppAt?: string | null) {
     dataNascimento: normalizeBirthDate(aluno),
     faixaAtual: normalizeFaixa(aluno),
     graus: normalizeGraus(aluno),
+    tiposAulaIds: Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [],
     isMe: true,
     // Campos do cadastro do aluno (obrigatorios neste endpoint).
     dataPagamento,
@@ -301,7 +342,13 @@ equipeRoutes.get('/', async (req, res) => {
     })
     .map((aluno) => {
       const linkedUser = findLinkedUser(database.users, aluno, currentUserId);
-      return toEquipeAluno(aluno, currentUserId, primaryAlunoId, linkedUser?.createdAt ?? null);
+      return toEquipeAluno(
+        aluno,
+        currentUserId,
+        primaryAlunoId,
+        linkedUser?.createdAt ?? null,
+        database.tiposAula
+      );
     })
     .sort(compareByFaixaThenGrausThenNome);
 
@@ -483,7 +530,13 @@ equipeRoutes.patch('/me/foto', async (req, res, next) => {
 
     const linkedUser = findLinkedUser(database.users, updated, currentUser.id);
     res.json({
-      data: toEquipeAluno(updated, currentUser.id, currentUser.alunoId ?? updated.id, linkedUser?.createdAt ?? null),
+      data: toEquipeAluno(
+        updated,
+        currentUser.id,
+        currentUser.alunoId ?? updated.id,
+        linkedUser?.createdAt ?? null,
+        database.tiposAula
+      ),
     });
   } catch (error) {
     next(error);
