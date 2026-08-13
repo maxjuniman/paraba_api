@@ -41,6 +41,7 @@ const alunoSchema = z.object({
   dataPagamento: paymentDaySchema.optional(),
   faixaAtual: z.string().trim().optional(),
   graus: z.number().int().min(0).max(10).optional(),
+  tiposAulaIds: z.array(z.string().trim().min(1)).optional(),
 });
 
 const autorizarSchema = z
@@ -309,6 +310,7 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
         pagamentosPagos: [],
         faixaAtual: parsed.data.aluno.faixaAtual || null,
         graus: parsed.data.aluno.graus ?? 0,
+        tiposAulaIds: parsed.data.aluno.tiposAulaIds ?? [],
         ativo: true,
         userId: null,
         user: null,

@@ -109,6 +109,12 @@ function asPaymentDay(value: unknown): string | null {
 }
 
 function mapAluno(row: Record<string, unknown>): Aluno {
+  const rawTipos = row.tipos_aula_ids;
+  let tiposAulaIds: string[] = [];
+  if (Array.isArray(rawTipos)) {
+    tiposAulaIds = rawTipos.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+
   return {
     id: String(row.id),
     nome: String(row.nome),
@@ -124,6 +130,8 @@ function mapAluno(row: Record<string, unknown>): Aluno {
     pagamentosPagos: (row.pagamentos_pagos as string[] | null | undefined) ?? [],
     faixaAtual: (row.faixa_atual as string | null | undefined) ?? null,
     graus: (row.graus as number | null | undefined) ?? 0,
+    tiposAulaIds,
+    tiposAula: null,
     ativo: asBoolean(row.ativo, true),
     userId: (row.user_id as string | null | undefined) ?? null,
     user: null,
@@ -233,9 +241,9 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
   const { rows } = await pool.query(
     `INSERT INTO alunos (
       id, nome, apelido, foto, email_responsavel, nome_responsavel, celular, data_nascimento, data_pagamento,
-      pagamento_pago, pagamento_referencia, pagamentos_pagos, faixa_atual, graus, ativo, user_id, created_at
+      pagamento_pago, pagamento_referencia, pagamentos_pagos, faixa_atual, graus, tipos_aula_ids, ativo, user_id, created_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15, $16, $17)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15::jsonb, $16, $17, $18)
     RETURNING *`,
     [
       aluno.id,
@@ -252,6 +260,7 @@ export async function insertAluno(aluno: Aluno): Promise<Aluno> {
       JSON.stringify(aluno.pagamentosPagos ?? []),
       aluno.faixaAtual ?? null,
       aluno.graus ?? 0,
+      JSON.stringify(aluno.tiposAulaIds ?? []),
       asBoolean(aluno.ativo, true),
       aluno.userId ?? null,
       aluno.createdAt,
@@ -279,8 +288,9 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       pagamentos_pagos = $12::jsonb,
       faixa_atual = $13,
       graus = $14,
-      ativo = $15,
-      user_id = $16
+      tipos_aula_ids = $15::jsonb,
+      ativo = $16,
+      user_id = $17
     WHERE id = $1
     RETURNING *`,
     [
@@ -298,6 +308,7 @@ export async function updateAluno(aluno: Aluno): Promise<Aluno> {
       JSON.stringify(aluno.pagamentosPagos ?? []),
       aluno.faixaAtual ?? null,
       aluno.graus ?? 0,
+      JSON.stringify(aluno.tiposAulaIds ?? []),
       asBoolean(aluno.ativo, true),
       aluno.userId ?? null,
     ]

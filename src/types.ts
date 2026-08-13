@@ -44,6 +44,10 @@ export type Aluno = {
   pagamentosPagos?: string[] | null;
   faixaAtual?: string | null;
   graus?: number | null;
+  /** IDs dos tipos de aula que o aluno frequenta. */
+  tiposAulaIds?: string[];
+  /** Resolvido na listagem a partir de tipos_aula. */
+  tiposAula?: { id: string; nome: string }[] | null;
   ativo?: boolean;
   userId?: string | null;
   user?: Pick<PublicUser, 'id' | 'nome' | 'email' | 'ativo'> | null;

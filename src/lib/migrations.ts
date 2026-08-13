@@ -218,6 +218,8 @@ WHERE tipo = 1 AND ativo IS DISTINCT FROM TRUE;
 
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;
 
+ALTER TABLE alunos ADD COLUMN IF NOT EXISTS tipos_aula_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 -- Permite 1 usuario vinculado a ate 2 alunos (remove UNIQUE legado em user_id).
 ALTER TABLE alunos DROP CONSTRAINT IF EXISTS alunos_user_id_key;
 DROP INDEX IF EXISTS alunos_user_id_key;

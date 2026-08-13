@@ -42,6 +42,7 @@ const alunoSchema = z.object({
   dataPagamento: paymentDaySchema.optional(),
   faixaAtual: z.string().trim().optional(),
   graus: z.number().int().min(0).max(10).optional(),
+  tiposAulaIds: z.array(z.string().trim().min(1)).min(1, 'Selecione ao menos um tipo de aula.'),
 });
 
 const vincularUserSchema = z.object({
@@ -102,14 +103,44 @@ function attendanceSummary(database: Awaited<ReturnType<typeof readDatabase>>, a
   };
 }
 
+function resolveTiposAula(
+  database: Awaited<ReturnType<typeof readDatabase>>,
+  tiposAulaIds?: string[] | null
+) {
+  const ids = Array.isArray(tiposAulaIds) ? tiposAulaIds : [];
+  return ids
+    .map((id) => database.tiposAula.find((tipo) => tipo.id === id))
+    .filter((tipo): tipo is NonNullable<typeof tipo> => Boolean(tipo))
+    .map((tipo) => ({ id: tipo.id, nome: tipo.nome }));
+}
+
 function alunoWithDetails(database: Awaited<ReturnType<typeof readDatabase>>, aluno: Aluno): Aluno {
   const user = findLinkedUser(database, aluno);
   return {
     ...aluno,
     user: userPreview(user),
     cadastroAppAt: user?.createdAt ?? null,
+    tiposAula: resolveTiposAula(database, aluno.tiposAulaIds),
     ...attendanceSummary(database, aluno.id),
   };
+}
+
+function normalizeTiposAulaIds(
+  database: Awaited<ReturnType<typeof readDatabase>>,
+  tiposAulaIds: string[] | undefined,
+  existingIds?: string[]
+): string[] | null {
+  const requested = tiposAulaIds ?? existingIds;
+  if (!requested || requested.length === 0) {
+    return null;
+  }
+
+  const known = new Set(database.tiposAula.map((tipo) => tipo.id));
+  const unique = [...new Set(requested.filter((id) => known.has(id)))];
+  if (unique.length === 0) {
+    return null;
+  }
+  return unique;
 }
 
 function findAlunoByCelular(
@@ -155,6 +186,12 @@ alunosRoutes.post('/', async (req, res, next) => {
       return;
     }
 
+    const tiposAulaIds = normalizeTiposAulaIds(database, parsed.data.tiposAulaIds);
+    if (!tiposAulaIds) {
+      res.status(400).json({ message: 'Selecione ao menos um tipo de aula valido.' });
+      return;
+    }
+
     const now = new Date().toISOString();
     const aluno = await insertAluno({
       id: randomUUID(),
@@ -171,13 +208,15 @@ alunosRoutes.post('/', async (req, res, next) => {
       pagamentosPagos: [],
       faixaAtual: parsed.data.faixaAtual || null,
       graus: parsed.data.graus ?? 0,
+      tiposAulaIds,
       ativo: true,
       userId: null,
       user: null,
       createdAt: now,
     });
 
-    res.status(201).json({ data: aluno });
+    const refreshed = await readDatabase();
+    res.status(201).json({ data: alunoWithDetails(refreshed, aluno) });
   } catch (error) {
     next(error);
   }
@@ -208,6 +247,16 @@ alunosRoutes.patch('/:alunoId', async (req, res, next) => {
       return;
     }
 
+    const tiposAulaIds = normalizeTiposAulaIds(
+      database,
+      parsed.data.tiposAulaIds,
+      existing.tiposAulaIds
+    );
+    if (!tiposAulaIds) {
+      res.status(400).json({ message: 'Selecione ao menos um tipo de aula valido.' });
+      return;
+    }
+
     const aluno = await updateAluno({
       ...existing,
       nome: parsed.data.nome,
@@ -230,6 +279,7 @@ alunosRoutes.patch('/:alunoId', async (req, res, next) => {
       faixaAtual:
         parsed.data.faixaAtual !== undefined ? parsed.data.faixaAtual || null : existing.faixaAtual,
       graus: parsed.data.graus !== undefined ? parsed.data.graus : (existing.graus ?? 0),
+      tiposAulaIds,
     });
 
     const refreshed = await readDatabase();
