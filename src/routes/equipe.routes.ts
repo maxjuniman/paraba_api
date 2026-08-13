@@ -49,6 +49,26 @@ function professorApelido(nome: string): string {
   return /^prof/i.test(first) ? first : `Prof ${first}`;
 }
 
+function isTipoZumba(nome?: string | null): boolean {
+  return Boolean(nome && /zumba/i.test(nome.trim()));
+}
+
+/** Aluno so de Zumba nao entra em "Nossos lutadores". */
+function isSomenteZumba(
+  aluno: Aluno,
+  tiposAula: { id: string; nome: string }[]
+): boolean {
+  const ids = Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [];
+  if (ids.length === 0) return false;
+
+  const nomes = ids
+    .map((id) => tiposAula.find((tipo) => tipo.id === id)?.nome ?? null)
+    .filter((nome): nome is string => Boolean(nome));
+
+  if (nomes.length === 0) return false;
+  return nomes.every((nome) => isTipoZumba(nome));
+}
+
 /** Lista publica da equipe (ativos) para o site de divulgacao. */
 equipeRoutes.get('/public', async (_req, res, next) => {
   try {
@@ -78,6 +98,7 @@ equipeRoutes.get('/public', async (_req, res, next) => {
       .filter((aluno) => aluno.ativo !== false)
       .filter((aluno) => !professorAlunoIds.has(aluno.id))
       .filter((aluno) => !professorNames.has(aluno.nome.trim().toLowerCase()))
+      .filter((aluno) => !isSomenteZumba(aluno, database.tiposAula))
       .map((aluno) => ({
         id: aluno.id,
         nome: aluno.nome,
