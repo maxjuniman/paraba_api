@@ -169,6 +169,12 @@ presencasRoutes.patch('/:data/aulas/:aulaId/alunos/:alunoId/toggle', async (req,
     return;
   }
 
+  const alunoTipos = Array.isArray(aluno.tiposAulaIds) ? aluno.tiposAulaIds : [];
+  if (!alunoTipos.includes(aula.tipoAulaId)) {
+    res.status(400).json({ message: 'Este aluno nao esta cadastrado neste tipo de aula.' });
+    return;
+  }
+
   const occursOnDate =
     aula.recorrencia === 'avulsa'
       ? aula.dataUnica === parsed.data
