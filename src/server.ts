@@ -16,7 +16,11 @@ import { videosRoutes } from './routes/videos.routes.js';
 
 const app = express();
 
-function resolveCorsOrigin(): boolean | string | RegExp | (string | RegExp)[] | ((
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function resolveCorsOrigin(): boolean | ((
   requestOrigin: string | undefined,
   callback: (err: Error | null, origin?: boolean | string) => void
 ) => void) {
@@ -25,26 +29,38 @@ function resolveCorsOrigin(): boolean | string | RegExp | (string | RegExp)[] | 
 
   const fromEnv = raw
     .split(',')
-    .map((item) => item.trim())
+    .map((item) => normalizeOrigin(item))
     .filter(Boolean);
 
-  // Origins do site de divulgacao (sempre liberados junto com CORS_ORIGIN).
+  // Origins do site / admin (sempre liberados junto com CORS_ORIGIN).
   const defaults = [
     'https://equipeparaba.com.br',
     'https://www.equipeparaba.com.br',
+    'https://maxfoot.com.br',
+    'https://www.maxfoot.com.br',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
   ];
 
-  const allowed = [...new Set([...fromEnv, ...defaults])];
-
-  if (allowed.length === 1) return allowed[0];
+  const allowed = new Set([...fromEnv, ...defaults].map(normalizeOrigin));
 
   return (requestOrigin, callback) => {
-    if (!requestOrigin || allowed.includes(requestOrigin)) {
+    // Requests sem Origin (app nativo, curl, healthcheck) passam.
+    if (!requestOrigin) {
       callback(null, true);
       return;
     }
+
+    const origin = normalizeOrigin(requestOrigin);
+    if (allowed.has(origin)) {
+      // Devolve o Origin exato — mais confiavel no preflight do browser.
+      callback(null, origin);
+      return;
+    }
+
+    console.warn(`[cors] Origin bloqueado: ${requestOrigin}`);
     callback(null, false);
   };
 }
@@ -54,6 +70,9 @@ ensureVideoUploadDir();
 app.use(
   cors({
     origin: resolveCorsOrigin(),
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
   })
 );
 app.use(express.json({ limit: '10mb' }));
