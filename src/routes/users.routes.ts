@@ -44,14 +44,10 @@ const alunoSchema = z.object({
   tiposAulaIds: z.array(z.string().trim().min(1)).optional(),
 });
 
-const autorizarSchema = z
-  .object({
-    aluno_id: z.string().trim().optional(),
-    aluno: alunoSchema.optional(),
-  })
-  .refine((body) => body.aluno_id || body.aluno, {
-    message: 'Informe um aluno existente ou os dados para cadastrar um novo aluno.',
-  });
+const autorizarSchema = z.object({
+  aluno_id: z.string().trim().optional(),
+  aluno: alunoSchema.optional(),
+});
 
 const professorSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do professor.'),
@@ -161,7 +157,27 @@ usersRoutes.get('/pendentes', async (_req, res, next) => {
     const database = await readDatabase();
     const users = database.users
       .filter((user) => user.tipo === 2 && user.ativo === false)
-      .map(toPublicUser)
+      .map((user) => {
+        const alunos = alunosVinculados(database.alunos, user.id).map((aluno) => {
+          const full = database.alunos.find((item) => item.id === aluno.id);
+          return {
+            ...aluno,
+            dataNascimento: full?.dataNascimento ?? null,
+            tiposAulaIds: full?.tiposAulaIds ?? [],
+            tiposAula: (full?.tiposAulaIds ?? [])
+              .map((id) => database.tiposAula.find((tipo) => tipo.id === id))
+              .filter((tipo): tipo is NonNullable<typeof tipo> => Boolean(tipo))
+              .map((tipo) => ({ id: tipo.id, nome: tipo.nome })),
+            nomeResponsavel: full?.nomeResponsavel ?? null,
+            emailResponsavel: full?.emailResponsavel ?? null,
+          };
+        });
+        return {
+          ...toPublicUser(user),
+          alunos,
+          alunosCount: alunos.length,
+        };
+      })
       .sort((a, b) => a.nome.localeCompare(b.nome));
 
     res.json({ data: users });
@@ -254,7 +270,7 @@ usersRoutes.patch('/:userId/aluno-primario', async (req, res, next) => {
 
 usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
   try {
-    const parsed = autorizarSchema.safeParse(req.body);
+    const parsed = autorizarSchema.safeParse(req.body ?? {});
 
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
@@ -271,6 +287,34 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
 
     if (user.tipo !== 2) {
       res.status(400).json({ message: 'Apenas usuarios alunos podem ser autorizados por este fluxo.' });
+      return;
+    }
+
+    const jaVinculados = database.alunos.filter((item) => item.userId === user.id);
+
+    // Fluxo novo: cadastro ja veio com aluno vinculado — professor so aprova.
+    if (!parsed.data.aluno_id && !parsed.data.aluno) {
+      if (jaVinculados.length === 0) {
+        res.status(400).json({
+          message: 'Este cadastro nao possui aluno vinculado. Vincule ou cadastre um aluno para autorizar.',
+        });
+        return;
+      }
+
+      const alunoPrimario =
+        jaVinculados.find((item) => item.id === user.alunoId) ?? jaVinculados[0];
+      const updatedUser = await updateUser({
+        ...user,
+        ativo: true,
+        alunoId: user.alunoId || alunoPrimario.id,
+      });
+
+      res.json({
+        data: {
+          user: toPublicUser(updatedUser),
+          aluno: alunoPrimario,
+        },
+      });
       return;
     }
 
@@ -328,7 +372,6 @@ usersRoutes.post('/:userId/autorizar', async (req, res, next) => {
       return;
     }
 
-    const jaVinculados = database.alunos.filter((item) => item.userId === user.id);
     if (!aluno.userId && jaVinculados.length >= MAX_ALUNOS_POR_USER) {
       res.status(400).json({
         message: `Cada usuario pode ter no maximo ${MAX_ALUNOS_POR_USER} alunos vinculados.`,

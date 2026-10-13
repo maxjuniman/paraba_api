@@ -209,12 +209,13 @@ function expandMonth(
   }).filter((item): item is NonNullable<typeof item> => item != null);
 }
 
-calendarioRoutes.use(authRequired);
-
+// Publico: usado no cadastro (app/site) antes do login.
 calendarioRoutes.get('/tipos', async (_req, res) => {
   const database = await readDatabase();
   res.json({ data: allTiposAula(database) });
 });
+
+calendarioRoutes.use(authRequired);
 
 calendarioRoutes.post('/tipos', async (req, res) => {
   if (!isProfessor(req.user?.tipo)) {

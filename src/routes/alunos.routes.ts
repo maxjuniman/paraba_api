@@ -56,6 +56,7 @@ const pagamentoSchema = z.object({
 const pagamentoStatusSchema = z.object({
   pago: z.boolean(),
   referencia: z.string().trim().regex(/^\d{4}-\d{2}$/, 'Informe a referencia no formato AAAA-MM.'),
+  data_pagamento: paymentDaySchema.optional(),
 });
 
 const ativoSchema = z.object({
@@ -408,6 +409,7 @@ alunosRoutes.patch('/:alunoId/pagamento-status', async (req, res, next) => {
       pagamentosPagos: [...pagamentosPagos].sort(),
       pagamentoPago: parsed.data.pago,
       pagamentoReferencia: parsed.data.referencia,
+      ...(parsed.data.data_pagamento ? { dataPagamento: parsed.data.data_pagamento } : {}),
     });
     res.json({ data: alunoWithDetails(database, updatedAluno) });
   } catch (error) {

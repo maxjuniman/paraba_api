@@ -4,7 +4,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { signAccessToken, toPublicUser } from '../lib/auth.js';
-import { insertUser, readDatabase, updateUser } from '../lib/db.js';
+import { insertAluno, insertUser, readDatabase, updateUser } from '../lib/db.js';
+import { isValidBrazilMobile, phonesMatch } from '../lib/phone.js';
 import { authRequired } from '../middleware/authRequired.js';
 import type { User } from '../types.js';
 
@@ -17,15 +18,47 @@ const loginSchema = z.object({
   senha: z.string().min(1),
 });
 
+const paymentDaySchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,2}$/, 'Informe o dia de pagamento entre 1 e 31.')
+  .refine((value) => {
+    const day = Number(value);
+    return Number.isInteger(day) && day >= 1 && day <= 31;
+  }, 'Informe o dia de pagamento entre 1 e 31.');
+
+const birthDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data de nascimento no formato AAAA-MM-DD.');
+
+const FAIXAS = ['Branca', 'Cinza', 'Amarela', 'Laranja', 'Verde', 'Azul', 'Roxa', 'Marrom', 'Preta'] as const;
+
 const registerSchema = z.object({
   nome: z.string().trim().min(1, 'Informe seu nome.'),
   email: z.string().trim().email('Informe um e-mail valido.'),
-  celular: z.string().trim().optional().default(''),
+  celular: z
+    .string()
+    .trim()
+    .min(1, 'Informe o celular com DDD.')
+    .refine((value) => isValidBrazilMobile(value), 'Informe um celular valido com DDD.'),
   senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
   confirmacao_senha: z.string().min(6),
+  apelido: z.string().trim().optional(),
+  nomeResponsavel: z.string().trim().optional(),
+  emailResponsavel: z.string().trim().email().optional().or(z.literal('')),
+  dataNascimento: birthDateSchema,
+  dataPagamento: paymentDaySchema.optional(),
+  faixaAtual: z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || FAIXAS.includes(value as (typeof FAIXAS)[number]), {
+      message: 'Faixa invalida.',
+    }),
+  graus: z.number().int().min(0).max(4).optional(),
+  tiposAulaIds: z.array(z.string().trim().min(1)).min(1, 'Selecione ao menos um tipo de aula.'),
 });
-
-const FAIXAS = ['Branca', 'Cinza', 'Amarela', 'Laranja', 'Verde', 'Azul', 'Roxa', 'Marrom', 'Preta'] as const;
 
 const updateMeSchema = z.object({
   nome: z.string().trim().min(1, 'Informe seu nome.'),
@@ -75,51 +108,113 @@ authRoutes.post('/login', async (req, res) => {
   res.json(sessionPayload(user));
 });
 
-authRoutes.post('/register', async (req, res) => {
-  if (!studentRegistrationEnabled) {
-    res.status(403).json({ message: 'Cadastro de usuario tipo 2 ainda nao esta disponivel.' });
-    return;
+authRoutes.post('/register', async (req, res, next) => {
+  try {
+    if (!studentRegistrationEnabled) {
+      res.status(403).json({ message: 'Cadastro de usuario tipo 2 ainda nao esta disponivel.' });
+      return;
+    }
+
+    const parsed = registerSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
+      return;
+    }
+
+    const {
+      nome,
+      senha,
+      confirmacao_senha,
+      celular,
+      apelido,
+      nomeResponsavel,
+      emailResponsavel,
+      dataNascimento,
+      dataPagamento,
+      faixaAtual,
+      graus,
+      tiposAulaIds,
+    } = parsed.data;
+    const email = parsed.data.email.toLowerCase();
+
+    if (senha !== confirmacao_senha) {
+      res.status(400).json({ message: 'A confirmacao de senha nao confere.' });
+      return;
+    }
+
+    const database = await readDatabase();
+
+    if (database.users.some((user) => user.email.toLowerCase() === email)) {
+      res.status(409).json({ message: 'Ja existe um usuario com este e-mail.' });
+      return;
+    }
+
+    const knownTipos = new Set(database.tiposAula.map((tipo) => tipo.id));
+    const tiposValidos = [...new Set(tiposAulaIds)].filter((id) => knownTipos.has(id));
+    if (tiposValidos.length === 0) {
+      res.status(400).json({ message: 'Selecione ao menos um tipo de aula valido.' });
+      return;
+    }
+
+    const duplicateAluno = database.alunos.find((item) => phonesMatch(item.celular, celular));
+    if (duplicateAluno) {
+      res.status(409).json({
+        message: `Ja existe um aluno com este celular (${duplicateAluno.nome}). Fale com o professor.`,
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const userId = randomUUID();
+    const alunoId = randomUUID();
+
+    const user = await insertUser({
+      id: userId,
+      nome,
+      email,
+      celular,
+      passwordHash: await bcrypt.hash(senha, 10),
+      tipo: 2,
+      ativo: false,
+      alunoId,
+      createdAt: now,
+    });
+
+    const aluno = await insertAluno({
+      id: alunoId,
+      nome,
+      apelido: apelido || null,
+      foto: null,
+      emailResponsavel: emailResponsavel || undefined,
+      nomeResponsavel: nomeResponsavel || null,
+      celular,
+      dataNascimento,
+      dataPagamento: dataPagamento || null,
+      pagamentoPago: false,
+      pagamentoReferencia: null,
+      pagamentosPagos: [],
+      faixaAtual: faixaAtual || null,
+      graus: graus ?? 0,
+      tiposAulaIds: tiposValidos,
+      ativo: true,
+      userId,
+      user: null,
+      createdAt: now,
+    });
+
+    res.status(201).json({
+      message: 'Cadastro enviado. Aguarde a autorizacao do professor para acessar o aplicativo.',
+      user: toPublicUser(user),
+      aluno: {
+        id: aluno.id,
+        nome: aluno.nome,
+        tiposAulaIds: aluno.tiposAulaIds ?? [],
+      },
+    });
+  } catch (error) {
+    next(error);
   }
-
-  const parsed = registerSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados invalidos.' });
-    return;
-  }
-
-  const { nome, senha, confirmacao_senha } = parsed.data;
-  const email = parsed.data.email.toLowerCase();
-
-  if (senha !== confirmacao_senha) {
-    res.status(400).json({ message: 'A confirmacao de senha nao confere.' });
-    return;
-  }
-
-  const database = await readDatabase();
-
-  if (database.users.some((user) => user.email.toLowerCase() === email)) {
-    res.status(409).json({ message: 'Ja existe um usuario com este e-mail.' });
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const user = await insertUser({
-    id: randomUUID(),
-    nome,
-    email,
-    celular: parsed.data.celular || undefined,
-    passwordHash: await bcrypt.hash(senha, 10),
-    tipo: 2,
-    ativo: false,
-    alunoId: null,
-    createdAt: now,
-  });
-
-  res.status(201).json({
-    message: 'Cadastro enviado. Aguarde a autorizacao do professor para acessar o aplicativo.',
-    user: toPublicUser(user),
-  });
 });
 
 authRoutes.get('/me', authRequired, async (req, res) => {
