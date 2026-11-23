@@ -49,3 +49,26 @@ export async function notifyAulaAvulsaCriada(tokens: string[]): Promise<void> {
     }))
   );
 }
+
+export async function notifyBroadcast(
+  tokens: string[],
+  title: string,
+  body: string
+): Promise<number> {
+  const uniqueTokens = [...new Set(tokens.filter(Boolean))];
+  if (uniqueTokens.length === 0) return 0;
+
+  await sendExpoPushNotifications(
+    uniqueTokens.map((token) => ({
+      to: token,
+      sound: 'default',
+      title,
+      body,
+      data: {
+        type: 'broadcast',
+      },
+    }))
+  );
+
+  return uniqueTokens.length;
+}
